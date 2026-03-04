@@ -182,54 +182,35 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   display:block;
 }
 
-/* Desktop sidebar */
+/* Sidebar — drawer для всех устройств */
 #sidebar{
-  width:240px;
-  flex-shrink:0;
+  position:fixed;
+  top:0;
+  left:-300px;
+  bottom:0;
+  width:260px;
+  z-index:299;
   display:flex;
   flex-direction:column;
-  background:rgba(8,11,21,.97);
+  background:#080b15;
   border-right:1px solid var(--border2);
   overflow:hidden;
-  transition:width .28s;
-  /* NO backdrop-filter, NO filter on desktop either for safety */
+  transition:left .25s ease;
+  pointer-events:none;
+}
+#sidebar.sb-open{
+  left:0;
+  pointer-events:all;
 }
 #sidebar.collapsed{
-  width:0;
+  left:-300px;
   pointer-events:none;
 }
 
-/* MOBILE sidebar — drawer через left, без transform, без opacity-анимации */
+/* Mobile safe-area padding */
 @media(max-width:768px){
   #sidebar{
-    position:fixed;
-    top:0;
-    left:-290px;   /* скрыт за экраном */
-    bottom:0;
-    width:280px;
-    z-index:299;
-    /* NO transform */
-    /* NO will-change */
-    /* NO filter */
-    /* NO backdrop-filter */
-    /* NO opacity transition */
-    transition:left .28s ease;
     padding-top:env(safe-area-inset-top,0px);
-    background:#080b15;  /* сплошной цвет, без rgba */
-    pointer-events:none;
-  }
-
-  /* Открыт */
-  #sidebar.sb-open{
-    left:0;
-    pointer-events:all;
-  }
-
-  /* collapsed на мобиле = просто убеждаемся что закрыт */
-  #sidebar.collapsed{
-    width:280px;   /* ширину не меняем на мобиле */
-    left:-290px;
-    pointer-events:none;
   }
 }
 
@@ -698,7 +679,7 @@ const DEFAULT_NAME = 'OmniumAI';
 let busy        = false;
 let totalTokens = 0;
 
-function isMobile() { return window.innerWidth <= 768; }
+function isMobile() { return window.innerWidth <= 960 || ('ontouchstart' in window); }
 
 // ── Settings ──
 function loadSettings() {
@@ -886,19 +867,15 @@ function toggleSidebar() {
   const overlay = document.getElementById('sidebarOverlay');
   const btn     = document.getElementById('sidebarToggle');
 
-  if (isMobile()) {
-    // Mobile: управляем только через sb-open и overlay.visible
-    // НЕ трогаем .collapsed на мобиле
-    if (sidebarOpen) {
-      sb.classList.add('sb-open');
-      overlay.classList.add('visible');
-    } else {
-      sb.classList.remove('sb-open');
-      overlay.classList.remove('visible');
-    }
+  // Всегда используем drawer (sb-open) подход — работает на любом устройстве
+  if (sidebarOpen) {
+    sb.classList.add('sb-open');
+    sb.classList.remove('collapsed');
+    overlay.classList.add('visible');
   } else {
-    // Desktop: управляем через .collapsed
-    sb.classList.toggle('collapsed', !sidebarOpen);
+    sb.classList.remove('sb-open');
+    sb.classList.add('collapsed');
+    overlay.classList.remove('visible');
   }
 
   btn.classList.toggle('active', sidebarOpen);
@@ -908,7 +885,9 @@ function toggleSidebar() {
 function closeSidebarMobile() {
   if (!sidebarOpen) return;
   sidebarOpen = false;
-  document.getElementById('sidebar').classList.remove('sb-open');
+  const sb = document.getElementById('sidebar');
+  sb.classList.remove('sb-open');
+  sb.classList.add('collapsed');
   document.getElementById('sidebarOverlay').classList.remove('visible');
   document.getElementById('sidebarToggle').classList.remove('active');
 }
