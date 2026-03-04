@@ -11,7 +11,7 @@ from flask import Flask, request, jsonify, Response, stream_with_context
 import urllib.request
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-GROQ_MODEL   = "meta-llama/llama-4-scout-17b-16e-instruct"  # vision support
+GROQ_MODEL   = "llama-3.2-11b-vision-preview"  # vision, free on groq
 DISPLAY_MODEL = "OmniNet 1.0"
 DISPLAY_NAME  = "OmniumAI"
 HOST, PORT    = "127.0.0.1", 5000
