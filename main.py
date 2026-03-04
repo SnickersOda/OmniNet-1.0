@@ -11,7 +11,7 @@ from flask import Flask, request, jsonify, Response, stream_with_context
 import urllib.request
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-OPENROUTER_MODEL   = "openrouter/free"
+OPENROUTER_MODEL   = "google/gemma-3-27b-it:free"
 DISPLAY_MODEL = "OmniNet 1.0"
 DISPLAY_NAME  = "OmniumAI"
 HOST, PORT    = "127.0.0.1", 5000
@@ -1310,6 +1310,8 @@ def chat():
     user_sys   = data.get("sys_prompt", DEFAULT_USER_SYSTEM).strip()
     if not messages:
         return jsonify({"error": "Нет сообщений"}), 400
+    if not OPENROUTER_API_KEY:
+        return jsonify({"error": "OPENROUTER_API_KEY не задан"}), 500
 
     combined = HIDDEN_SYSTEM
     if user_sys:
@@ -1355,7 +1357,10 @@ def chat():
                         pass
             yield "data: [DONE]\n\n"
         except Exception as e:
-            yield "data: " + json.dumps({"error": str(e)[:200]}, ensure_ascii=False) + "\n\n"
+            import traceback, sys
+            print("GENERATE ERROR:", str(e), file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            yield "data: " + json.dumps({"error": str(e)[:500]}, ensure_ascii=False) + "\n\n"
             yield "data: [DONE]\n\n"
 
     return Response(
