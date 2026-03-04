@@ -174,9 +174,9 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 #sidebarOverlay{
   display:none;
   position:fixed;
-  top:0;left:0;right:0;bottom:0;
+  top:0;left:260px;right:0;bottom:0;
   z-index:298;
-  background:rgba(4,5,13,.6);
+  background:rgba(4,5,13,.5);
 }
 #sidebarOverlay.visible{
   display:block;
