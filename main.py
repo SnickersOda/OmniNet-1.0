@@ -5,10 +5,9 @@ OmniumAI — powered by OmniNet 1.0
 Запуск: pip install flask groq  →  python omniumai.py
 """
 
-import os, json, time, threading
+import os, json, sys
 from flask import Flask, request, jsonify, Response, stream_with_context
-
-import urllib.request
+from groq import Groq
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 GROQ_MODEL   = "meta-llama/llama-4-scout-17b-16e-instruct"  # vision
@@ -1319,41 +1318,21 @@ def chat():
     full = [{"role": "system", "content": combined}] + messages
 
     def generate():
-        import sys
         try:
-            payload = json.dumps({
-                "model": GROQ_MODEL,
-                "messages": full,
-                "max_tokens": 2048,
-                "temperature": 0.75,
-                "stream": True
-            }).encode("utf-8")
-            req = urllib.request.Request(
-                "https://api.groq.com/openai/v1/chat/completions",
-                data=payload,
-                headers={
-                    "Authorization": f"Bearer {GROQ_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                method="POST"
+            client = Groq(api_key=GROQ_API_KEY)
+            stream = client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=full,
+                max_tokens=2048,
+                temperature=0.75,
+                stream=True
             )
-            with urllib.request.urlopen(req) as resp:
-                for raw_line in resp:
-                    line = raw_line.decode("utf-8").strip()
-                    if not line.startswith("data:"):
-                        continue
-                    payload_str = line[5:].strip()
-                    if payload_str == "[DONE]":
-                        break
-                    try:
-                        obj = json.loads(payload_str)
-                        delta = ""
-                        if obj.get("choices"):
-                            delta = obj["choices"][0].get("delta", {}).get("content") or ""
-                        if delta:
-                            yield "data: " + json.dumps({"delta": delta}, ensure_ascii=False) + "\n\n"
-                    except Exception:
-                        pass
+            for chunk in stream:
+                delta = ""
+                if chunk.choices and chunk.choices[0].delta:
+                    delta = chunk.choices[0].delta.content or ""
+                if delta:
+                    yield "data: " + json.dumps({"delta": delta}, ensure_ascii=False) + "\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
             print(f"GROQ ERROR: {e}", file=sys.stderr)
