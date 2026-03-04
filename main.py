@@ -10,14 +10,8 @@ from flask import Flask, request, jsonify, Response, stream_with_context
 
 import urllib.request
 
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-OPENROUTER_MODELS  = [
-    "google/gemma-3-27b-it:free",
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "mistralai/mistral-small-3.1-24b-instruct:free",
-    "deepseek/deepseek-chat-v3-0324:free",
-    "microsoft/phi-4-reasoning:free",
-]
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GROQ_MODEL   = "meta-llama/llama-4-scout-17b-16e-instruct"  # vision support
 DISPLAY_MODEL = "OmniNet 1.0"
 DISPLAY_NAME  = "OmniumAI"
 HOST, PORT    = "127.0.0.1", 5000
@@ -1316,8 +1310,8 @@ def chat():
     user_sys   = data.get("sys_prompt", DEFAULT_USER_SYSTEM).strip()
     if not messages:
         return jsonify({"error": "Нет сообщений"}), 400
-    if not OPENROUTER_API_KEY:
-        return jsonify({"error": "OPENROUTER_API_KEY не задан"}), 500
+    if not GROQ_API_KEY:
+        return jsonify({"error": "GROQ_API_KEY не задан"}), 500
 
     combined = HIDDEN_SYSTEM
     if user_sys:
@@ -1325,59 +1319,46 @@ def chat():
     full = [{"role": "system", "content": combined}] + messages
 
     def generate():
-        import urllib.error, sys
-        last_error = "Нет доступных моделей"
-        for model in OPENROUTER_MODELS:
-            try:
-                payload = json.dumps({
-                    "model": model,
-                    "messages": full,
-                    "max_tokens": 2048,
-                    "temperature": 0.75,
-                    "stream": True
-                }).encode("utf-8")
-                req = urllib.request.Request(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    data=payload,
-                    headers={
-                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                        "Content-Type": "application/json",
-                        "HTTP-Referer": "https://omniumai.onrender.com",
-                        "X-Title": "OmniumAI"
-                    },
-                    method="POST"
-                )
-                with urllib.request.urlopen(req) as resp:
-                    for raw_line in resp:
-                        line = raw_line.decode("utf-8").strip()
-                        if not line.startswith("data:"):
-                            continue
-                        payload_str = line[5:].strip()
-                        if payload_str == "[DONE]":
-                            break
-                        try:
-                            obj = json.loads(payload_str)
-                            delta = ""
-                            if obj.get("choices"):
-                                delta = obj["choices"][0].get("delta", {}).get("content") or ""
-                            if delta:
-                                yield "data: " + json.dumps({"delta": delta}, ensure_ascii=False) + "\n\n"
-                        except Exception:
-                            pass
-                yield "data: [DONE]\n\n"
-                return
-            except urllib.error.HTTPError as e:
-                last_error = f"HTTP {e.code} ({model})"
-                print(f"Model {model} failed: {e.code}", file=sys.stderr)
-                if e.code not in (429, 503, 502, 404):
-                    break  # не пробуем дальше при 401, 400 и т.д.
-                continue
-            except Exception as e:
-                last_error = str(e)[:200]
-                print(f"Model {model} error: {e}", file=sys.stderr)
-                continue
-        yield "data: " + json.dumps({"error": last_error}, ensure_ascii=False) + "\n\n"
-        yield "data: [DONE]\n\n"
+        import sys
+        try:
+            payload = json.dumps({
+                "model": GROQ_MODEL,
+                "messages": full,
+                "max_tokens": 2048,
+                "temperature": 0.75,
+                "stream": True
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                "https://api.groq.com/openai/v1/chat/completions",
+                data=payload,
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req) as resp:
+                for raw_line in resp:
+                    line = raw_line.decode("utf-8").strip()
+                    if not line.startswith("data:"):
+                        continue
+                    payload_str = line[5:].strip()
+                    if payload_str == "[DONE]":
+                        break
+                    try:
+                        obj = json.loads(payload_str)
+                        delta = ""
+                        if obj.get("choices"):
+                            delta = obj["choices"][0].get("delta", {}).get("content") or ""
+                        if delta:
+                            yield "data: " + json.dumps({"delta": delta}, ensure_ascii=False) + "\n\n"
+                    except Exception:
+                        pass
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            print(f"GROQ ERROR: {e}", file=sys.stderr)
+            yield "data: " + json.dumps({"error": str(e)[:300]}, ensure_ascii=False) + "\n\n"
+            yield "data: [DONE]\n\n"
 
     return Response(
         stream_with_context(generate()),
