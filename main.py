@@ -1087,13 +1087,4 @@ def _open():
     webbrowser.open(f"http://{HOST}:{PORT}")
 
 if __name__ == "__main__":
-    print(f"\n{'═'*52}")
-    print(f"  ✦  OmniumAI — OmniNet 1.0")
-    print(f"{'═'*52}")
-    print(f"  🌐  http://{HOST}:{PORT}")
-    print(f"  🤖  {GROQ_MODEL} → {DISPLAY_MODEL}")
-    print(f"  ⛔  Ctrl+C для остановки")
-    print(f"{'═'*52}\n")
-    threading.Thread(target=_open, daemon=True).start()
-    port = int(os.environ.get("PORT", 10000))
-app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(debug=False)
