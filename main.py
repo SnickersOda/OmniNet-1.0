@@ -11,7 +11,12 @@ from flask import Flask, request, jsonify, Response, stream_with_context
 import urllib.request
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-OPENROUTER_MODEL   = "google/gemma-3-27b-it:free"
+OPENROUTER_MODELS  = [
+    "google/gemma-3-27b-it:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "mistralai/mistral-small-3.1-24b-instruct:free",
+    "qwen/qwen2.5-vl-72b-instruct:free",
+]
 DISPLAY_MODEL = "OmniNet 1.0"
 DISPLAY_NAME  = "OmniumAI"
 HOST, PORT    = "127.0.0.1", 5000
@@ -1319,49 +1324,59 @@ def chat():
     full = [{"role": "system", "content": combined}] + messages
 
     def generate():
-        try:
-            payload = json.dumps({
-                "model": OPENROUTER_MODEL,
-                "messages": full,
-                "max_tokens": 2048,
-                "temperature": 0.75,
-                "stream": True
-            }).encode("utf-8")
-            req = urllib.request.Request(
-                "https://openrouter.ai/api/v1/chat/completions",
-                data=payload,
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://omniumai.onrender.com",
-                    "X-Title": "OmniumAI"
-                },
-                method="POST"
-            )
-            with urllib.request.urlopen(req) as resp:
-                for raw_line in resp:
-                    line = raw_line.decode("utf-8").strip()
-                    if not line.startswith("data:"):
-                        continue
-                    payload_str = line[5:].strip()
-                    if payload_str == "[DONE]":
-                        break
-                    try:
-                        obj = json.loads(payload_str)
-                        delta = ""
-                        if obj.get("choices"):
-                            delta = obj["choices"][0].get("delta", {}).get("content") or ""
-                        if delta:
-                            yield "data: " + json.dumps({"delta": delta}, ensure_ascii=False) + "\n\n"
-                    except Exception:
-                        pass
-            yield "data: [DONE]\n\n"
-        except Exception as e:
-            import traceback, sys
-            print("GENERATE ERROR:", str(e), file=sys.stderr)
-            traceback.print_exc(file=sys.stderr)
-            yield "data: " + json.dumps({"error": str(e)[:500]}, ensure_ascii=False) + "\n\n"
-            yield "data: [DONE]\n\n"
+        import urllib.error, sys
+        last_error = "Нет доступных моделей"
+        for model in OPENROUTER_MODELS:
+            try:
+                payload = json.dumps({
+                    "model": model,
+                    "messages": full,
+                    "max_tokens": 2048,
+                    "temperature": 0.75,
+                    "stream": True
+                }).encode("utf-8")
+                req = urllib.request.Request(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    data=payload,
+                    headers={
+                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://omniumai.onrender.com",
+                        "X-Title": "OmniumAI"
+                    },
+                    method="POST"
+                )
+                with urllib.request.urlopen(req) as resp:
+                    for raw_line in resp:
+                        line = raw_line.decode("utf-8").strip()
+                        if not line.startswith("data:"):
+                            continue
+                        payload_str = line[5:].strip()
+                        if payload_str == "[DONE]":
+                            break
+                        try:
+                            obj = json.loads(payload_str)
+                            delta = ""
+                            if obj.get("choices"):
+                                delta = obj["choices"][0].get("delta", {}).get("content") or ""
+                            if delta:
+                                yield "data: " + json.dumps({"delta": delta}, ensure_ascii=False) + "\n\n"
+                        except Exception:
+                            pass
+                yield "data: [DONE]\n\n"
+                return
+            except urllib.error.HTTPError as e:
+                last_error = f"HTTP {e.code} ({model})"
+                print(f"Model {model} failed: {e.code}", file=sys.stderr)
+                if e.code not in (429, 503, 502, 404):
+                    break  # не пробуем дальше при 401, 400 и т.д.
+                continue
+            except Exception as e:
+                last_error = str(e)[:200]
+                print(f"Model {model} error: {e}", file=sys.stderr)
+                continue
+        yield "data: " + json.dumps({"error": last_error}, ensure_ascii=False) + "\n\n"
+        yield "data: [DONE]\n\n"
 
     return Response(
         stream_with_context(generate()),
