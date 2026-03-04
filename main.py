@@ -55,7 +55,6 @@ HTML = r"""<!DOCTYPE html>
 [data-theme="light"] .bubble-bot{background:linear-gradient(160deg,rgba(255,255,255,.97),rgba(240,244,255,.95));color:#1a2040}
 [data-theme="light"] .bubble-user{background:linear-gradient(160deg,rgba(56,189,248,.12),rgba(167,139,250,.09));color:#1a2040}
 [data-theme="light"] header,[data-theme="light"] .input-area,[data-theme="light"] #sidebar{background:rgba(230,236,255,.98)}
-[data-theme="light"] .nebula{opacity:.25}
 [data-theme="light"] #grid{opacity:.4}
 [data-theme="light"] .star{background:#334}
 [data-theme="green"]{
@@ -63,56 +62,61 @@ HTML = r"""<!DOCTYPE html>
   --border:rgba(52,211,153,.07);--border2:rgba(52,211,153,.12);--border3:rgba(52,211,153,.22);
   --accent:#34d399;--violet:#6ee7b7;--text:#d1fae5;--muted:#2d6a4f;--muted2:#52b788;
 }
-[data-theme="green"] .nebula.n1{background:radial-gradient(ellipse,rgba(52,211,153,.1) 0%,transparent 70%)}
-[data-theme="green"] .nebula.n2{background:radial-gradient(ellipse,rgba(6,95,70,.15) 0%,transparent 70%)}
-[data-theme="green"] header::after{background:linear-gradient(90deg,transparent,var(--accent),transparent)}
 [data-theme="amber"]{
   --bg:#0d0800;--s1:#160d00;--s2:#1e1200;--s3:#261800;--s4:#332200;
   --border:rgba(251,191,36,.07);--border2:rgba(251,191,36,.12);--border3:rgba(251,191,36,.22);
   --accent:#fbbf24;--violet:#f59e0b;--text:#fef3c7;--muted:#92400e;--muted2:#d97706;
 }
-[data-theme="amber"] .nebula.n1{background:radial-gradient(ellipse,rgba(251,191,36,.09) 0%,transparent 70%)}
-[data-theme="amber"] .nebula.n2{background:radial-gradient(ellipse,rgba(180,83,9,.12) 0%,transparent 70%)}
-[data-theme="amber"] header::after{background:linear-gradient(90deg,transparent,var(--accent),transparent)}
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{
   height:100%;height:-webkit-fill-available;
   background:var(--bg);color:var(--text);
-  font-family:'DM Sans',sans-serif;overflow:hidden;-webkit-text-size-adjust:100%;
+  font-family:'DM Sans',sans-serif;overflow-x:hidden;-webkit-text-size-adjust:100%;
 }
 
-/* ── COSMOS BG ── */
+/* ══════════════════════════════════════════════════════
+   COSMOS BG — desktop has blurred nebulae, mobile does NOT.
+   On mobile Chrome Android, ANY filter:blur() in the DOM
+   causes a full-page repaint when a will-change:transform
+   element animates. So we simply skip the cosmos on mobile.
+   ══════════════════════════════════════════════════════ */
 #cosmos{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
-.nebula{position:absolute;border-radius:50%;filter:blur(80px)}
-.n1{width:600px;height:400px;top:-10%;left:-5%;
-    background:radial-gradient(ellipse,rgba(56,189,248,.11) 0%,transparent 70%);
+
+/* Desktop nebulae with blur */
+.nebula{position:absolute;border-radius:50%}
+.n1{width:700px;height:450px;top:-10%;left:-5%;
+    background:radial-gradient(ellipse,rgba(56,189,248,.13) 0%,transparent 65%);
+    filter:blur(70px);
     animation:drift1 18s ease-in-out infinite alternate}
-.n2{width:500px;height:500px;bottom:-10%;right:-5%;
-    background:radial-gradient(ellipse,rgba(167,139,248,.13) 0%,transparent 70%);
+.n2{width:600px;height:600px;bottom:-10%;right:-5%;
+    background:radial-gradient(ellipse,rgba(167,139,250,.14) 0%,transparent 65%);
+    filter:blur(70px);
     animation:drift2 22s ease-in-out infinite alternate}
-.n3{width:350px;height:250px;top:40%;left:30%;
-    background:radial-gradient(ellipse,rgba(52,211,153,.06) 0%,transparent 70%);
+.n3{width:400px;height:280px;top:40%;left:30%;
+    background:radial-gradient(ellipse,rgba(52,211,153,.07) 0%,transparent 65%);
+    filter:blur(60px);
     animation:drift3 26s ease-in-out infinite alternate}
 @keyframes drift1{from{transform:translate(0,0)}to{transform:translate(40px,30px)}}
 @keyframes drift2{from{transform:translate(0,0)}to{transform:translate(-30px,-40px)}}
 @keyframes drift3{from{transform:translate(0,0)}to{transform:translate(20px,-20px)}}
 
-/* FIX: on mobile, filter:blur() on background elements causes the entire
-   page compositing layer to re-blur when any overlay/drawer animates.
-   Disable nebulae blur on mobile entirely.                              */
-@media(max-width:768px){
-  .nebula{filter:none !important;opacity:.4}
-}
+/* MOBILE: kill all nebulae — no filter:blur anywhere in DOM */
+body.is-mobile .nebula{display:none}
 
 #stars{position:absolute;inset:0}
 .star{position:absolute;border-radius:50%;background:#fff;animation:twinkle var(--d,3s) ease-in-out infinite}
 @keyframes twinkle{0%,100%{opacity:var(--o,.3)}50%{opacity:calc(var(--o,.3)*2.5)}}
+/* Fewer stars on mobile */
+body.is-mobile #stars{opacity:.6}
+
 #grid{position:absolute;inset:0;
   background-image:linear-gradient(rgba(56,189,248,.022) 1px,transparent 1px),
                    linear-gradient(90deg,rgba(56,189,248,.022) 1px,transparent 1px);
   background-size:60px 60px;
   mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,black,transparent)}
+/* No mask (uses filter internally in some browsers) on mobile */
+body.is-mobile #grid{mask-image:none;-webkit-mask-image:none;opacity:.3}
 
 /* ── APP SHELL ── */
 .app{position:relative;z-index:1;height:100vh;height:-webkit-fill-available;display:flex;flex-direction:column}
@@ -122,15 +126,17 @@ header{
   height:var(--header-h);display:flex;align-items:center;justify-content:space-between;
   padding:0 16px;padding-top:env(safe-area-inset-top,0px);
   background:rgba(6,8,18,.95);
-  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
   border-bottom:1px solid var(--border2);
   flex-shrink:0;gap:8px;z-index:200;position:relative;
 }
-@media(max-width:768px){
-  header{background:rgba(5,7,16,.99);backdrop-filter:none;-webkit-backdrop-filter:none;}
+/* Mobile: NO backdrop-filter */
+body.is-mobile header{
+  background:rgba(5,7,16,.99);
+  backdrop-filter:none;-webkit-backdrop-filter:none;
 }
 header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px;
-  background:linear-gradient(90deg,transparent,var(--accent),var(--violet),transparent);opacity:.3}
+  background:linear-gradient(90deg,transparent,var(--accent),var(--violet),transparent);opacity:.35}
 
 .logo{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .logo-gem{width:28px;height:28px;flex-shrink:0}
@@ -151,74 +157,73 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .hdr-right{display:flex;align-items:center;gap:5px}
 #tokenCount{font-size:.62rem;color:var(--muted);padding:3px 7px;border-radius:6px;
   background:var(--s2);border:1px solid var(--border);font-family:'JetBrains Mono',monospace;white-space:nowrap}
-@media(max-width:600px){#tokenCount{display:none}}
+body.is-mobile #tokenCount{display:none}
 
 .hdr-btn{display:flex;align-items:center;gap:4px;padding:6px 10px;border-radius:8px;
   font-size:.7rem;font-weight:600;font-family:'Syne',sans-serif;cursor:pointer;
   border:1px solid var(--border2);background:rgba(255,255,255,.04);
-  color:var(--muted2);transition:all .18s;white-space:nowrap;
+  color:var(--muted2);transition:background .15s,border-color .15s,color .15s;white-space:nowrap;
   -webkit-tap-highlight-color:transparent;touch-action:manipulation;min-height:34px}
 .hdr-btn:hover{border-color:var(--border3);color:var(--text);background:rgba(255,255,255,.07)}
 .hdr-btn.active{border-color:rgba(56,189,248,.4);color:var(--accent);background:rgba(56,189,248,.08)}
 .hdr-btn.danger:hover{border-color:rgba(251,113,133,.35);color:var(--rose);background:rgba(251,113,133,.07)}
 .hdr-btn .btn-label{display:inline}
-@media(max-width:600px){.hdr-btn .btn-label{display:none}.hdr-btn{padding:6px 8px}}
+body.is-mobile .hdr-btn .btn-label{display:none}
+body.is-mobile .hdr-btn{padding:6px 8px}
 @media(max-width:400px){.hdr-btn.hide-xs{display:none}}
 
 /* ── BODY ── */
 .body{flex:1;display:flex;overflow:hidden;min-height:0}
 
 /* ── SIDEBAR OVERLAY ──
-   FIX: The overlay sits BEHIND the sidebar (z-index:299 < sidebar z-index:400).
-   It only covers the chat area to catch "close on outside tap".
-   NO backdrop-filter — that was causing full-screen blur.               */
+   z-index 299 — always BEHIND the sidebar (z-index 400).
+   No filter, no backdrop-filter.                          */
 #sidebarOverlay{
+  display:none;
   position:fixed;inset:0;z-index:299;
-  background:rgba(4,5,13,.65);
-  opacity:0;pointer-events:none;
-  transition:opacity .22s;
+  background:rgba(0,0,0,.55);
+  opacity:0;transition:opacity .22s;
+  pointer-events:none;
 }
-#sidebarOverlay.visible{opacity:1;pointer-events:all}
+#sidebarOverlay.visible{
+  display:block;
+  opacity:1;pointer-events:all;
+}
 
-/* ── SIDEBAR ──
-   FIX: z-index:400 > overlay z-index:299, so sidebar is always on top.
-   FIX: transform-only animation — no opacity changes during slide.      */
+/* ── SIDEBAR ── */
 #sidebar{
   width:240px;flex-shrink:0;display:flex;flex-direction:column;
-  background:var(--s1);
-  border-right:1px solid var(--border2);
+  background:var(--s1);border-right:1px solid var(--border2);
   transition:width .25s,opacity .25s;
   overflow:hidden;z-index:400;
 }
 #sidebar.collapsed{width:0;opacity:0;pointer-events:none}
 
-@media(max-width:768px){
-  #sidebar{
-    position:fixed;top:0;left:0;bottom:0;
-    width:280px;
-    /* Always opaque — no opacity animation */
-    opacity:1 !important;
-    transform:translateX(-100%);
-    /* Only GPU transform — no filter, no opacity animation */
-    transition:transform .28s cubic-bezier(.22,1,.36,1);
-    padding-top:env(safe-area-inset-top,0px);
-    /* Fully opaque solid bg — no transparency, no blur */
-    background:#07091b;
-    backdrop-filter:none;
-    -webkit-backdrop-filter:none;
-    will-change:transform;
-    /* Must be ABOVE the overlay */
-    z-index:400;
-  }
-  #sidebar.collapsed{
-    width:280px;
-    transform:translateX(-100%);
-    pointer-events:none;
-  }
-  #sidebar:not(.collapsed){
-    transform:translateX(0);
-    pointer-events:all;
-  }
+/* Mobile drawer */
+body.is-mobile #sidebar{
+  position:fixed;top:0;left:0;bottom:0;
+  width:280px;
+  opacity:1 !important;
+  /* GPU-only transform, zero other effects */
+  transform:translateX(-100%);
+  transition:transform .26s cubic-bezier(.25,1,.5,1);
+  padding-top:env(safe-area-inset-top,0px);
+  background:#07091b;
+  /* CRITICAL: no filter, no backdrop-filter, no box-shadow with blur */
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+  filter:none !important;
+  box-shadow:none;
+  will-change:transform;
+  z-index:400;
+}
+body.is-mobile #sidebar.collapsed{
+  width:280px;transform:translateX(-100%);pointer-events:none;
+}
+body.is-mobile #sidebar:not(.collapsed){
+  transform:translateX(0);pointer-events:all;
+  /* subtle shadow without blur keyword */
+  box-shadow:4px 0 20px rgba(0,0,0,.5);
 }
 
 .sb-head{padding:14px 12px 10px;display:flex;align-items:center;justify-content:space-between}
@@ -235,27 +240,25 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 #tabList::-webkit-scrollbar-thumb{background:var(--s4)}
 
 .tab-item{display:flex;align-items:center;gap:7px;padding:10px;border-radius:9px;
-  cursor:pointer;margin-bottom:3px;transition:background .15s,border-color .15s;
-  border:1px solid transparent;font-size:.82rem;color:var(--muted2);
+  cursor:pointer;margin-bottom:3px;border:1px solid transparent;
+  font-size:.82rem;color:var(--muted2);
   -webkit-tap-highlight-color:transparent;touch-action:manipulation;min-height:44px;
-  /* Ensure tab items are always interactive */
-  position:relative;z-index:1;}
-.tab-item:hover{background:rgba(255,255,255,.04);color:var(--text)}
+  transition:background .15s,border-color .15s;}
+.tab-item:hover,.tab-item:active{background:rgba(255,255,255,.05);color:var(--text)}
 .tab-item.active{background:rgba(56,189,248,.08);border-color:rgba(56,189,248,.18);color:var(--text)}
 .tab-icon{font-size:.75rem;flex-shrink:0;opacity:.7}
 .tab-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem}
 .tab-del{
-  width:32px;height:32px;border-radius:6px;border:none;background:none;
+  width:32px;height:32px;border-radius:6px;border:none;background:transparent;
   color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;
-  font-size:13px;opacity:0;transition:opacity .15s;flex-shrink:0;
+  font-size:14px;flex-shrink:0;
   touch-action:manipulation;-webkit-tap-highlight-color:transparent;
-  /* Bigger tap target on mobile */
-  position:relative;z-index:2;
+  opacity:0;transition:opacity .15s;
 }
 .tab-item:hover .tab-del{opacity:1}
-.tab-del:hover{background:rgba(251,113,133,.15);color:var(--rose)}
-/* Always visible on touch devices */
-@media(hover:none){.tab-del{opacity:.6}}
+.tab-del:hover,.tab-del:active{background:rgba(251,113,133,.15);color:var(--rose);opacity:1}
+/* Always show on touch */
+@media(hover:none){.tab-del{opacity:.55}}
 
 /* ── CHAT AREA ── */
 .chat-area{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
@@ -264,18 +267,20 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   -webkit-overflow-scrolling:touch}
 #chatBox::-webkit-scrollbar{width:4px}
 #chatBox::-webkit-scrollbar-thumb{background:var(--s4);border-radius:4px}
-@media(max-width:600px){#chatBox{padding:16px 12px 8px;gap:14px}}
+body.is-mobile #chatBox{padding:16px 12px 8px;gap:14px}
 
 /* ── WELCOME ── */
 .welcome{display:flex;flex-direction:column;align-items:center;justify-content:center;
   flex:1;gap:14px;padding:30px 20px;text-align:center;
-  animation:fadeUp .55s cubic-bezier(.22,1,.36,1) both}
-@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+  animation:fadeUp .5s cubic-bezier(.22,1,.36,1) both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 .w-logo{position:relative;width:64px;height:64px;margin-bottom:2px}
 .w-logo svg{width:100%;height:100%}
 .w-logo::after{content:'';position:absolute;inset:-10px;border-radius:50%;
   background:conic-gradient(from 0deg,var(--accent),var(--violet),var(--accent));
   filter:blur(14px);opacity:.2;animation:spin 8s linear infinite;z-index:-1}
+/* No filter on logo glow on mobile either */
+body.is-mobile .w-logo::after{display:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 .welcome h2{font-family:'Syne',sans-serif;font-weight:800;font-size:1.35rem;
   background:linear-gradient(110deg,#fff 20%,var(--accent) 55%,var(--violet) 100%);
@@ -284,36 +289,34 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:2px}
 .chip{padding:8px 13px;border-radius:20px;font-size:.76rem;cursor:pointer;
   background:rgba(255,255,255,.04);border:1px solid var(--border2);color:var(--muted2);
-  transition:border-color .2s,color .2s,background .2s;
+  transition:border-color .18s,color .18s,background .18s;
   touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .chip:hover,.chip:active{border-color:rgba(56,189,248,.35);color:var(--text);background:rgba(56,189,248,.06)}
-@media(max-width:480px){
-  .welcome{gap:10px;padding:20px 14px}
-  .welcome h2{font-size:1.15rem}.welcome p{font-size:.78rem}
-  .chip{font-size:.72rem;padding:7px 11px}
-}
+body.is-mobile .welcome{gap:10px;padding:20px 14px}
+body.is-mobile .welcome h2{font-size:1.15rem}
+body.is-mobile .welcome p{font-size:.78rem}
+body.is-mobile .chip{font-size:.72rem;padding:7px 11px}
 
 /* ── MESSAGES ── */
-.mw{display:flex;gap:9px;animation:msgIn .28s cubic-bezier(.22,1,.36,1) both;
+.mw{display:flex;gap:9px;animation:msgIn .25s cubic-bezier(.22,1,.36,1) both;
   max-width:800px;width:100%;margin:0 auto}
 .mw.user{flex-direction:row-reverse}
-@keyframes msgIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes msgIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 .av{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;
   justify-content:center;flex-shrink:0;margin-top:2px}
 .av-bot{background:linear-gradient(135deg,rgba(56,189,248,.2),rgba(167,139,250,.3));border:1px solid rgba(56,189,248,.22)}
 .av-user{background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.2)}
-.bubble{max-width:calc(100% - 42px);padding:12px 15px;border-radius:14px;font-size:.875rem;line-height:1.7;position:relative}
+.bubble{max-width:calc(100% - 42px);padding:12px 15px;border-radius:14px;font-size:.875rem;line-height:1.7}
 .bubble-bot{background:linear-gradient(160deg,rgba(13,17,32,.97),rgba(8,11,21,.93));
   border:1px solid rgba(56,189,248,.1);border-top-left-radius:3px;
-  box-shadow:0 4px 22px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.04)}
+  box-shadow:0 4px 20px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.04)}
 .bubble-user{background:linear-gradient(160deg,rgba(56,189,248,.09),rgba(167,139,250,.07));
   border:1px solid rgba(167,139,250,.18);border-top-right-radius:3px;
-  box-shadow:0 4px 22px rgba(0,0,0,.2);color:#ddeeff}
-@media(max-width:480px){
-  .av{width:26px;height:26px;border-radius:7px;margin-top:1px}
-  .bubble{max-width:calc(100% - 36px);padding:10px 12px;font-size:.84rem;border-radius:12px}
-  .mw{gap:7px}
-}
+  box-shadow:0 4px 20px rgba(0,0,0,.2);color:#ddeeff}
+body.is-mobile .av{width:26px;height:26px;border-radius:7px;margin-top:1px}
+body.is-mobile .bubble{max-width:calc(100% - 36px);padding:10px 12px;font-size:.84rem;border-radius:12px}
+body.is-mobile .mw{gap:7px}
+
 .bname{font-size:.6rem;font-weight:700;font-family:'Syne',sans-serif;
   letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px;
   display:flex;align-items:center;gap:6px}
@@ -325,7 +328,6 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   opacity:0;white-space:nowrap;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .bubble:hover .copy-btn{opacity:1}
 @media(hover:none){.copy-btn{opacity:.4}}
-.copy-btn:hover{border-color:var(--border3);color:var(--text)}
 .copy-btn.copied{color:var(--emerald);border-color:rgba(52,211,153,.3);opacity:1}
 
 .code-wrap{position:relative;margin:10px 0}
@@ -340,7 +342,6 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   touch-action:manipulation;-webkit-tap-highlight-color:transparent;min-height:28px}
 @media(hover:none){.code-copy{opacity:1}}
 @media(hover:hover){.code-copy{opacity:0}.code-wrap:hover .code-copy{opacity:1}}
-.code-copy:hover{border-color:var(--accent);color:var(--accent);background:rgba(56,189,248,.08)}
 .code-copy.copied{color:var(--emerald);border-color:rgba(52,211,153,.3);opacity:1}
 
 .typing::after{content:'▋';animation:blink-c .65s step-end infinite;color:var(--accent);font-size:.85em;margin-left:2px}
@@ -372,29 +373,29 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   padding-bottom:max(12px,calc(env(safe-area-inset-bottom)+8px));
   position:relative;
   background:rgba(6,8,18,.92);
-  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
   border-top:1px solid var(--border);flex-shrink:0;
 }
-@media(max-width:768px){
-  .input-area{
-    background:rgba(5,7,16,.99);
-    backdrop-filter:none;-webkit-backdrop-filter:none;
-    padding-bottom:max(10px,calc(env(safe-area-inset-bottom)+6px));
-  }
+/* Mobile: NO backdrop-filter */
+body.is-mobile .input-area{
+  background:rgba(5,7,16,.99);
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+  padding-bottom:max(10px,calc(env(safe-area-inset-bottom)+6px));
 }
 .input-area::before{content:'';position:absolute;top:-1px;left:10%;right:10%;height:1px;
   background:linear-gradient(90deg,transparent,rgba(56,189,248,.18),rgba(167,139,250,.18),transparent)}
 
 .iw{max-width:800px;margin:0 auto;display:flex;align-items:flex-end;gap:8px;
   background:rgba(13,17,32,.98);border:1px solid var(--border2);border-radius:14px;
-  padding:8px 10px 8px 14px;transition:border-color .22s,box-shadow .22s}
+  padding:8px 10px 8px 14px;transition:border-color .2s,box-shadow .2s}
 .iw:focus-within{border-color:rgba(56,189,248,.35);box-shadow:0 0 0 3px rgba(56,189,248,.07)}
 #msgInput{flex:1;background:none;border:none;outline:none;color:var(--text);
   font-size:.89rem;font-family:'DM Sans',sans-serif;resize:none;
   min-height:24px;max-height:140px;line-height:1.55;overflow-y:auto;padding-top:2px;
   -webkit-appearance:none;-webkit-tap-highlight-color:transparent}
 #msgInput::placeholder{color:var(--muted)}
-@media(max-width:600px){#msgInput{font-size:16px}}
+/* 16px prevents iOS/Android auto-zoom on focus */
+body.is-mobile #msgInput{font-size:16px}
 
 .ia{display:flex;align-items:center;flex-shrink:0}
 .btn-send{width:38px;height:38px;border-radius:10px;border:none;cursor:pointer;
@@ -413,17 +414,17 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   text-align:center;opacity:.5;display:flex;align-items:center;justify-content:center;gap:8px}
 .kbg{background:var(--s2);border:1px solid var(--border2);border-radius:4px;
   padding:1px 5px;font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted2)}
-@media(max-width:600px){.hint{display:none}}
+body.is-mobile .hint{display:none}
 
 /* ── SETTINGS PANEL ── */
 #settingsPanel{position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;
-  background:rgba(4,5,13,.8);opacity:0;pointer-events:none;transition:opacity .25s;padding:16px}
+  background:rgba(4,5,13,.82);opacity:0;pointer-events:none;transition:opacity .22s;padding:16px}
 #settingsPanel.open{opacity:1;pointer-events:all}
 .settings-box{width:540px;max-width:100%;max-height:90vh;overflow-y:auto;
   background:var(--s2);border:1px solid var(--border2);border-radius:18px;
   box-shadow:0 24px 80px rgba(0,0,0,.7);-webkit-overflow-scrolling:touch}
-#settingsPanel.open .settings-box{animation:modalIn .28s cubic-bezier(.22,1,.36,1) both}
-@keyframes modalIn{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
+#settingsPanel.open .settings-box{animation:modalIn .25s cubic-bezier(.22,1,.36,1) both}
+@keyframes modalIn{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
 .sb-hdr{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 14px;
   border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--s2);z-index:1}
 .sb-hdr h2{font-family:'Syne',sans-serif;font-size:.95rem;font-weight:700;
@@ -446,8 +447,10 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .field textarea:focus,.field input:focus,.field select:focus{
   border-color:rgba(56,189,248,.4);box-shadow:0 0 0 3px rgba(56,189,248,.08)}
 .field textarea{min-height:100px;line-height:1.55}
-@media(max-width:600px){.field textarea,.field input[type=text],.field select{font-size:16px}}
-.field select{cursor:pointer;background-image:none}
+body.is-mobile .field textarea,
+body.is-mobile .field input[type=text],
+body.is-mobile .field select{font-size:16px}
+.field select{cursor:pointer}
 .field select option{background:var(--s3)}
 .btn-row{display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border)}
 .btn-primary{padding:10px 20px;border-radius:10px;border:none;cursor:pointer;
@@ -479,26 +482,26 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 #toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(8px);
   display:flex;align-items:center;gap:7px;padding:9px 16px;border-radius:20px;
   font-size:.78rem;font-weight:500;color:#fff;z-index:9999;
-  opacity:0;transition:opacity .28s,transform .28s;pointer-events:none;white-space:nowrap;
+  opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;
   box-shadow:0 8px 28px rgba(0,0,0,.5)}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #toast.ok{background:linear-gradient(135deg,#065f46,#059669);border:1px solid rgba(52,211,153,.2)}
 #toast.err{background:linear-gradient(135deg,#7f1d1d,#dc2626);border:1px solid rgba(251,113,133,.2)}
 #toast.info{background:linear-gradient(135deg,#1e3a5f,#0284c7);border:1px solid rgba(56,189,248,.2)}
-@media(max-width:600px){
-  #toast{bottom:90px;font-size:.74rem;padding:8px 14px;max-width:88vw;white-space:normal;text-align:center}
-}
+body.is-mobile #toast{bottom:88px;font-size:.74rem;padding:8px 14px;max-width:88vw;white-space:normal;text-align:center}
 </style>
 </head>
 <body>
 
 <div id="cosmos">
-  <div id="stars"></div><div id="grid"></div>
-  <div class="nebula n1"></div><div class="nebula n2"></div><div class="nebula n3"></div>
+  <div id="stars"></div>
+  <div id="grid"></div>
+  <div class="nebula n1"></div>
+  <div class="nebula n2"></div>
+  <div class="nebula n3"></div>
 </div>
 
-<!-- Overlay sits BEHIND sidebar (z-index 299 < sidebar 400).
-     Taps on the sidebar itself will never reach the overlay.  -->
+<!-- Overlay: z-index 299, always behind sidebar (400) -->
 <div id="sidebarOverlay"></div>
 
 <div class="app">
@@ -557,7 +560,7 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
     <div id="sidebar" class="collapsed">
       <div class="sb-head">
         <span class="sb-title">Чаты</span>
-        <button class="btn-new-chat" onclick="newChat()" title="Новый чат">+</button>
+        <button class="btn-new-chat" onclick="newChat()">+</button>
       </div>
       <div id="tabList"></div>
     </div>
@@ -612,7 +615,6 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   </div>
 </div>
 
-<!-- SETTINGS -->
 <div id="settingsPanel" onclick="onOverlayClick(event)">
   <div class="settings-box">
     <div class="sb-hdr">
@@ -622,7 +624,7 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
     <div class="sb-body">
       <div class="field">
         <label>Системный промпт <span class="sys-badge">ACTIVE</span></label>
-        <p class="field-desc">Задаёт роль, стиль и ограничения модели. Применяется ко всем чатам.</p>
+        <p class="field-desc">Задаёт роль, стиль и ограничения модели.</p>
         <textarea id="sysPromptInput" placeholder="Ты — полезный ассистент…" rows="5"></textarea>
       </div>
       <div class="field">
@@ -660,7 +662,20 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 const DEFAULT_SYS  = `""" + DEFAULT_USER_SYSTEM.replace('`','\\`') + r"""`;
 const DEFAULT_NAME = 'OmniumAI';
 let busy=false, totalTokens=0;
-function isMobile(){ return window.innerWidth<=768; }
+
+// ── Detect mobile ONCE, add class to body ──
+const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.innerWidth <= 768;
+if(IS_MOBILE){
+  document.body.classList.add('is-mobile');
+  // CRITICAL FIX for Chrome Android:
+  // filter:blur() elements cause full-page compositing repaint when ANY
+  // will-change:transform element animates — even if CSS says display:none.
+  // The only fix is to physically remove them from the DOM before first paint.
+  document.querySelectorAll('.nebula').forEach(el=>el.remove());
+  // Also remove the grid mask (uses internal filter in some Chrome versions)
+  const grid=document.getElementById('grid');
+  if(grid){grid.style.maskImage='none';grid.style.webkitMaskImage='none';}
+}
 
 // ── Settings ──
 function loadSettings(){
@@ -677,7 +692,7 @@ function applyTheme(t){
   document.documentElement.setAttribute('data-theme',t==='dark'?'':t);
   document.querySelectorAll('.theme-opt').forEach(el=>el.classList.toggle('active',el.dataset.theme===t));
 }
-function pickTheme(t){ applyTheme(t); document.getElementById('themePicker').dataset.pending=t; }
+function pickTheme(t){applyTheme(t);document.getElementById('themePicker').dataset.pending=t;}
 
 // ── Chats ──
 function loadChats(){
@@ -694,12 +709,12 @@ function setActive(id){activeChatId=id;localStorage.setItem('omni_active',id);}
 
 // ── Stars ──
 (function(){
-  const c=document.getElementById('stars'),n=isMobile()?50:130;
+  const c=document.getElementById('stars'),n=IS_MOBILE?40:130;
   for(let i=0;i<n;i++){
     const s=document.createElement('div');s.className='star';
     const sz=Math.random()*2+.4;
     s.style.cssText='left:'+(Math.random()*100)+'%;top:'+(Math.random()*100)+'%;'+
-      'width:'+sz+'px;height:'+sz+'px serves;--o:'+(Math.random()*.5+.1)+
+      'width:'+sz+'px;height:'+sz+'px;--o:'+(Math.random()*.5+.1)+
       ';--d:'+(Math.random()*4+2)+'s;animation-delay:'+(Math.random()*6)+'s';
     c.appendChild(s);
   }
@@ -711,12 +726,12 @@ function toast(msg,type){
   t.textContent=msg;t.className='show '+(type||'info');
   clearTimeout(t._t);t._t=setTimeout(()=>t.className='',3000);
 }
-function ar(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,isMobile()?120:160)+'px';}
+function ar(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,IS_MOBILE?120:160)+'px';}
 function hk(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}
 function chip(el){const i=document.getElementById('msgInput');i.value=el.textContent.replace(/^✦\s*/,'');ar(i);i.focus();}
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-function updateTokens(text){
-  totalTokens+=Math.round(text.trim().split(/\s+/).filter(Boolean).length*1.3);
+function updateTokens(t){
+  totalTokens+=Math.round(t.trim().split(/\s+/).filter(Boolean).length*1.3);
   document.getElementById('tokenCount').textContent=totalTokens+' токенов';
 }
 
@@ -768,11 +783,11 @@ function addMsg(role,html,streaming){
 }
 function addThinking(){
   rmWelcome();const box=document.getElementById('chatBox');
-  const wrap=document.createElement('div');wrap.id='thinking';wrap.className='mw bot';
-  wrap.innerHTML='<div class="av av-bot">'+botAv+'</div>'+
+  const w=document.createElement('div');w.id='thinking';w.className='mw bot';
+  w.innerHTML='<div class="av av-bot">'+botAv+'</div>'+
     '<div class="bubble bubble-bot"><div class="bname">'+esc(loadSettings().assistantName||DEFAULT_NAME)+'</div>'+
     '<div class="dots"><span></span><span></span><span></span></div></div>';
-  box.appendChild(wrap);box.scrollTop=box.scrollHeight;
+  box.appendChild(w);box.scrollTop=box.scrollHeight;
 }
 function rmThinking(){const e=document.getElementById('thinking');if(e)e.remove();}
 function copyBub(btn){
@@ -784,67 +799,64 @@ function copyBub(btn){
 
 // ── Sidebar ──
 let sidebarOpen=false;
-const $sidebar=()=>document.getElementById('sidebar');
-const $overlay=()=>document.getElementById('sidebarOverlay');
+const $sb=()=>document.getElementById('sidebar');
+const $ov=()=>document.getElementById('sidebarOverlay');
 
 function toggleSidebar(){
   sidebarOpen=!sidebarOpen;
-  $sidebar().classList.toggle('collapsed',!sidebarOpen);
+  $sb().classList.toggle('collapsed',!sidebarOpen);
   document.getElementById('sidebarToggle').classList.toggle('active',sidebarOpen);
-  if(isMobile()){
-    // Overlay shown only on mobile, and it must NOT cover the sidebar itself.
-    // We handle "tap outside" by listening on the overlay which sits behind sidebar (z299).
+  if(IS_MOBILE){
     if(sidebarOpen){
-      $overlay().style.opacity='1';
-      $overlay().style.pointerEvents='all';
-      // Close when tapping the dim area (outside the sidebar)
-      $overlay().onclick=closeSidebarMobile;
+      $ov().classList.add('visible');
+      // Tap on dim area closes sidebar
+      $ov().onclick=closeSidebar;
     } else {
-      $overlay().style.opacity='0';
-      $overlay().style.pointerEvents='none';
-      $overlay().onclick=null;
+      $ov().classList.remove('visible');
+      $ov().onclick=null;
     }
   }
   if(sidebarOpen) renderTabs();
 }
 
-function closeSidebarMobile(){
+function closeSidebar(){
   sidebarOpen=false;
-  $sidebar().classList.add('collapsed');
+  $sb().classList.add('collapsed');
   document.getElementById('sidebarToggle').classList.remove('active');
-  $overlay().style.opacity='0';
-  $overlay().style.pointerEvents='none';
-  $overlay().onclick=null;
+  $ov().classList.remove('visible');
+  $ov().onclick=null;
 }
 
-window.addEventListener('resize',()=>{
-  if(!isMobile()){
-    $overlay().style.opacity='0';
-    $overlay().style.pointerEvents='none';
-  }
-});
-
 function renderTabs(){
-  const list=document.getElementById('tabList');list.innerHTML='';
+  const list=document.getElementById('tabList');
+  list.innerHTML='';
   chats.forEach(chat=>{
     const div=document.createElement('div');
     div.className='tab-item'+(chat.id===activeChatId?' active':'');
 
-    const icon=document.createElement('span');icon.className='tab-icon';icon.textContent='💬';
-    const label=document.createElement('span');label.className='tab-label';label.textContent=chat.title;
+    const icon=document.createElement('span');
+    icon.className='tab-icon';icon.textContent='💬';
 
-    div.appendChild(icon);div.appendChild(label);
+    const label=document.createElement('span');
+    label.className='tab-label';label.textContent=chat.title;
+
+    div.appendChild(icon);
+    div.appendChild(label);
 
     if(chats.length>1){
       const del=document.createElement('button');
-      del.className='tab-del';del.title='Удалить';del.textContent='✕';
-      del.addEventListener('click',e=>{e.stopPropagation();deleteChat(chat.id);});
+      del.className='tab-del';del.textContent='✕';del.title='Удалить';
+      del.addEventListener('click',function(e){
+        e.stopPropagation();
+        e.preventDefault();
+        deleteChat(chat.id);
+      });
       div.appendChild(del);
     }
 
-    div.addEventListener('click',()=>{
+    div.addEventListener('click',function(){
       switchChat(chat.id);
-      if(isMobile()) closeSidebarMobile();
+      if(IS_MOBILE) closeSidebar();
     });
 
     list.appendChild(div);
@@ -854,7 +866,7 @@ function renderTabs(){
 function newChat(){
   const chat=newChatObj();chats.unshift(chat);saveChats();
   switchChat(chat.id);renderTabs();
-  if(isMobile()) closeSidebarMobile();
+  if(IS_MOBILE) closeSidebar();
   toast('Новый чат создан','ok');
 }
 function switchChat(id){
@@ -863,8 +875,8 @@ function switchChat(id){
 }
 function deleteChat(id){
   chats=chats.filter(c=>c.id!==id);
-  if(!chats.length) chats=[newChatObj()];
-  if(activeChatId===id) setActive(chats[0].id);
+  if(!chats.length)chats=[newChatObj()];
+  if(activeChatId===id)setActive(chats[0].id);
   saveChats();renderTabs();rebuildChatBox();
   toast('Чат удалён','info');
 }
@@ -872,8 +884,10 @@ function rebuildChatBox(){
   const box=document.getElementById('chatBox'),msgs=getActive().messages;
   if(!msgs.length){box.innerHTML=welcomeHTML();return;}
   box.innerHTML='';
-  msgs.forEach(m=>{if(m.role==='user')addMsg('user',esc(m.content),false);
-    else if(m.role==='assistant')addMsg('bot',md(m.content),false);});
+  msgs.forEach(m=>{
+    if(m.role==='user')addMsg('user',esc(m.content),false);
+    else if(m.role==='assistant')addMsg('bot',md(m.content),false);
+  });
 }
 function welcomeHTML(){
   return'<div class="welcome" id="ws">'+
@@ -911,8 +925,11 @@ function closeSettings(){document.getElementById('settingsPanel').classList.remo
 function onOverlayClick(e){if(e.target===document.getElementById('settingsPanel'))closeSettings();}
 function saveSettings(){
   const theme=document.getElementById('themePicker').dataset.pending||loadSettings().theme;
-  const s={sysPrompt:document.getElementById('sysPromptInput').value.trim()||DEFAULT_SYS,
-           assistantName:document.getElementById('assistantNameInput').value.trim()||DEFAULT_NAME,theme};
+  const s={
+    sysPrompt:document.getElementById('sysPromptInput').value.trim()||DEFAULT_SYS,
+    assistantName:document.getElementById('assistantNameInput').value.trim()||DEFAULT_NAME,
+    theme
+  };
   saveSettingsData(s);applyTheme(theme);closeSettings();
   toast('Настройки сохранены ✓','ok');
 }
@@ -928,7 +945,7 @@ async function send(){
   const inp=document.getElementById('msgInput');
   const text=inp.value.trim();if(!text)return;
   inp.value='';inp.style.height='auto';
-  if(isMobile())inp.blur();
+  if(IS_MOBILE)inp.blur();
 
   const chat=getActive();
   addMsg('user',esc(text),false);updateTokens(text);
@@ -937,8 +954,10 @@ async function send(){
   if(chat.messages.length>40)chat.messages=chat.messages.slice(-40);
   saveChats();
 
-  busy=true;const btn=document.getElementById('sendBtn');
-  btn.disabled=true;btn.classList.add('pulsing');addThinking();
+  busy=true;
+  const btn=document.getElementById('sendBtn');
+  btn.disabled=true;btn.classList.add('pulsing');
+  addThinking();
   try{
     const res=await fetch('/api/chat',{method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -973,9 +992,12 @@ async function send(){
     else if(raw)addMsg('bot',md(raw),false);
     if(raw){chat.messages.push({role:'assistant',content:raw});saveChats();updateTokens(raw);}
   }catch(err){
-    rmThinking();addMsg('bot','<strong>⚠️ Ошибка соединения.</strong>',false);
+    rmThinking();
+    addMsg('bot','<strong>⚠️ Ошибка соединения.</strong>',false);
     toast('Ошибка соединения','err');console.error(err);
-  }finally{busy=false;btn.disabled=false;btn.classList.remove('pulsing');}
+  }finally{
+    busy=false;btn.disabled=false;btn.classList.remove('pulsing');
+  }
 }
 
 function clearChat(){
@@ -989,7 +1011,9 @@ function exportChat(){
   if(!chat.messages.length){toast('Нет сообщений для экспорта','err');return;}
   const name=loadSettings().assistantName||DEFAULT_NAME;
   let out=`# ${chat.title}\n> Экспортировано из OmniumAI · OmniNet 1.0 · ${new Date().toLocaleString('ru')}\n\n---\n\n`;
-  chat.messages.forEach(m=>{out+=`### ${m.role==='user'?'👤 **Вы**':'✦ **'+name+'**'}\n\n${m.content}\n\n---\n\n`;});
+  chat.messages.forEach(m=>{
+    out+=`### ${m.role==='user'?'👤 **Вы**':'✦ **'+name+'**'}\n\n${m.content}\n\n---\n\n`;
+  });
   const blob=new Blob([out],{type:'text/markdown;charset=utf-8'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
