@@ -5,7 +5,7 @@ OmniumAI — powered by OmniNet 1.0
 Запуск: pip install flask groq  →  python omniumai.py
 """
 
-import os, json, time
+import os, json
 from flask import Flask, request, jsonify, Response, stream_with_context
 
 try:
@@ -28,7 +28,6 @@ HIDDEN_SYSTEM = (
 )
 DEFAULT_USER_SYSTEM = "Ты полезный, дружелюбный и умный ассистент. Отвечай развёрнуто и по делу."
 
-# ─────────────────────────────────────────────────────────────────────────────
 HTML = r"""<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -98,6 +97,14 @@ html,body{
 @keyframes drift1{from{transform:translate(0,0)}to{transform:translate(40px,30px)}}
 @keyframes drift2{from{transform:translate(0,0)}to{transform:translate(-30px,-40px)}}
 @keyframes drift3{from{transform:translate(0,0)}to{transform:translate(20px,-20px)}}
+
+/* FIX: on mobile, filter:blur() on background elements causes the entire
+   page compositing layer to re-blur when any overlay/drawer animates.
+   Disable nebulae blur on mobile entirely.                              */
+@media(max-width:768px){
+  .nebula{filter:none !important;opacity:.4}
+}
+
 #stars{position:absolute;inset:0}
 .star{position:absolute;border-radius:50%;background:#fff;animation:twinkle var(--d,3s) ease-in-out infinite}
 @keyframes twinkle{0%,100%{opacity:var(--o,.3)}50%{opacity:calc(var(--o,.3)*2.5)}}
@@ -110,28 +117,17 @@ html,body{
 /* ── APP SHELL ── */
 .app{position:relative;z-index:1;height:100vh;height:-webkit-fill-available;display:flex;flex-direction:column}
 
-/* ── HEADER ──
-   MOBILE FIX: backdrop-filter on fixed/sticky elements triggers a new
-   compositing layer in WebKit. When another element (sidebar) animates
-   on top, the compositing order can re-blur the whole viewport.
-   Solution: solid bg on mobile, blur only on desktop.                   */
+/* ── HEADER ── */
 header{
-  height:var(--header-h);
-  display:flex;align-items:center;justify-content:space-between;
-  padding:0 16px;
-  padding-top:env(safe-area-inset-top,0px);
+  height:var(--header-h);display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px;padding-top:env(safe-area-inset-top,0px);
   background:rgba(6,8,18,.95);
-  backdrop-filter:blur(24px);
-  -webkit-backdrop-filter:blur(24px);
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
   border-bottom:1px solid var(--border2);
   flex-shrink:0;gap:8px;z-index:200;position:relative;
 }
 @media(max-width:768px){
-  header{
-    background:rgba(5,7,16,.99);
-    backdrop-filter:none;
-    -webkit-backdrop-filter:none;
-  }
+  header{background:rgba(5,7,16,.99);backdrop-filter:none;-webkit-backdrop-filter:none;}
 }
 header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,var(--accent),var(--violet),transparent);opacity:.3}
@@ -173,46 +169,46 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .body{flex:1;display:flex;overflow:hidden;min-height:0}
 
 /* ── SIDEBAR OVERLAY ──
-   KEY FIX: No backdrop-filter. Using a semi-transparent solid colour only.
-   backdrop-filter on a full-screen overlay forces the browser to create a
-   new compositing layer for everything behind it and re-apply the blur
-   filter — which is exactly what produces the "blurry screen" on mobile. */
+   FIX: The overlay sits BEHIND the sidebar (z-index:299 < sidebar z-index:400).
+   It only covers the chat area to catch "close on outside tap".
+   NO backdrop-filter — that was causing full-screen blur.               */
 #sidebarOverlay{
   position:fixed;inset:0;z-index:299;
-  background:rgba(4,5,13,.72);
-  /* backdrop-filter: NONE — this was the root cause */
+  background:rgba(4,5,13,.65);
   opacity:0;pointer-events:none;
   transition:opacity .22s;
 }
 #sidebarOverlay.visible{opacity:1;pointer-events:all}
 
-/* ── SIDEBAR ── */
+/* ── SIDEBAR ──
+   FIX: z-index:400 > overlay z-index:299, so sidebar is always on top.
+   FIX: transform-only animation — no opacity changes during slide.      */
 #sidebar{
   width:240px;flex-shrink:0;display:flex;flex-direction:column;
   background:var(--s1);
   border-right:1px solid var(--border2);
   transition:width .25s,opacity .25s;
-  overflow:hidden;z-index:300;
+  overflow:hidden;z-index:400;
 }
 #sidebar.collapsed{width:0;opacity:0;pointer-events:none}
 
-/* Mobile drawer:
-   - position:fixed so it floats over content
-   - transform-only animation (GPU-composited, never triggers repaint of page)
-   - opacity stays 1 always — no opacity animation
-   - solid bg, NO backdrop-filter                                          */
 @media(max-width:768px){
   #sidebar{
     position:fixed;top:0;left:0;bottom:0;
     width:280px;
+    /* Always opaque — no opacity animation */
     opacity:1 !important;
     transform:translateX(-100%);
+    /* Only GPU transform — no filter, no opacity animation */
     transition:transform .28s cubic-bezier(.22,1,.36,1);
     padding-top:env(safe-area-inset-top,0px);
-    background:#08091a;   /* fully opaque dark — no alpha, no blur */
+    /* Fully opaque solid bg — no transparency, no blur */
+    background:#07091b;
     backdrop-filter:none;
     -webkit-backdrop-filter:none;
     will-change:transform;
+    /* Must be ABOVE the overlay */
+    z-index:400;
   }
   #sidebar.collapsed{
     width:280px;
@@ -241,22 +237,28 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .tab-item{display:flex;align-items:center;gap:7px;padding:10px;border-radius:9px;
   cursor:pointer;margin-bottom:3px;transition:background .15s,border-color .15s;
   border:1px solid transparent;font-size:.82rem;color:var(--muted2);
-  -webkit-tap-highlight-color:transparent;touch-action:manipulation;min-height:44px}
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation;min-height:44px;
+  /* Ensure tab items are always interactive */
+  position:relative;z-index:1;}
 .tab-item:hover{background:rgba(255,255,255,.04);color:var(--text)}
 .tab-item.active{background:rgba(56,189,248,.08);border-color:rgba(56,189,248,.18);color:var(--text)}
 .tab-icon{font-size:.75rem;flex-shrink:0;opacity:.7}
 .tab-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem}
-.tab-del{width:24px;height:24px;border-radius:5px;border:none;background:none;
+.tab-del{
+  width:32px;height:32px;border-radius:6px;border:none;background:none;
   color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;
-  font-size:12px;opacity:0;transition:opacity .15s;flex-shrink:0;
-  touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  font-size:13px;opacity:0;transition:opacity .15s;flex-shrink:0;
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+  /* Bigger tap target on mobile */
+  position:relative;z-index:2;
+}
 .tab-item:hover .tab-del{opacity:1}
 .tab-del:hover{background:rgba(251,113,133,.15);color:var(--rose)}
-@media(hover:none){.tab-del{opacity:.5}}
+/* Always visible on touch devices */
+@media(hover:none){.tab-del{opacity:.6}}
 
 /* ── CHAT AREA ── */
 .chat-area{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
-
 #chatBox{flex:1;overflow-y:auto;padding:24px 16px 12px;
   display:flex;flex-direction:column;gap:18px;scroll-behavior:smooth;
   -webkit-overflow-scrolling:touch}
@@ -287,8 +289,7 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .chip:hover,.chip:active{border-color:rgba(56,189,248,.35);color:var(--text);background:rgba(56,189,248,.06)}
 @media(max-width:480px){
   .welcome{gap:10px;padding:20px 14px}
-  .welcome h2{font-size:1.15rem}
-  .welcome p{font-size:.78rem}
+  .welcome h2{font-size:1.15rem}.welcome p{font-size:.78rem}
   .chip{font-size:.72rem;padding:7px 11px}
 }
 
@@ -299,11 +300,9 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 @keyframes msgIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 .av{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;
   justify-content:center;flex-shrink:0;margin-top:2px}
-.av-bot{background:linear-gradient(135deg,rgba(56,189,248,.2),rgba(167,139,250,.3));
-  border:1px solid rgba(56,189,248,.22)}
+.av-bot{background:linear-gradient(135deg,rgba(56,189,248,.2),rgba(167,139,250,.3));border:1px solid rgba(56,189,248,.22)}
 .av-user{background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.2)}
-.bubble{max-width:calc(100% - 42px);padding:12px 15px;border-radius:14px;
-  font-size:.875rem;line-height:1.7;position:relative}
+.bubble{max-width:calc(100% - 42px);padding:12px 15px;border-radius:14px;font-size:.875rem;line-height:1.7;position:relative}
 .bubble-bot{background:linear-gradient(160deg,rgba(13,17,32,.97),rgba(8,11,21,.93));
   border:1px solid rgba(56,189,248,.1);border-top-left-radius:3px;
   box-shadow:0 4px 22px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.04)}
@@ -329,7 +328,6 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .copy-btn:hover{border-color:var(--border3);color:var(--text)}
 .copy-btn.copied{color:var(--emerald);border-color:rgba(52,211,153,.3);opacity:1}
 
-/* Code */
 .code-wrap{position:relative;margin:10px 0}
 .code-wrap pre{margin:0;background:rgba(4,5,13,.9);border:1px solid var(--border2);
   border-radius:10px;padding:14px 16px;overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -351,11 +349,9 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .dots span{width:6px;height:6px;border-radius:50%;
   background:linear-gradient(135deg,var(--accent),var(--violet));opacity:.4;
   animation:th 1.3s ease-in-out infinite}
-.dots span:nth-child(2){animation-delay:.18s}
-.dots span:nth-child(3){animation-delay:.36s}
+.dots span:nth-child(2){animation-delay:.18s}.dots span:nth-child(3){animation-delay:.36s}
 @keyframes th{0%,80%,100%{transform:scale(1);opacity:.4}40%{transform:scale(1.5);opacity:1}}
 
-/* Markdown */
 .bubble p{margin-bottom:7px}.bubble p:last-child{margin-bottom:0}
 .bubble code{font-family:'JetBrains Mono',monospace;font-size:.78em;
   background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.15);
@@ -373,20 +369,16 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 /* ── INPUT AREA ── */
 .input-area{
   padding:10px 16px;
-  padding-bottom:max(12px,calc(env(safe-area-inset-bottom) + 8px));
+  padding-bottom:max(12px,calc(env(safe-area-inset-bottom)+8px));
   position:relative;
   background:rgba(6,8,18,.92);
-  backdrop-filter:blur(24px);
-  -webkit-backdrop-filter:blur(24px);
-  border-top:1px solid var(--border);
-  flex-shrink:0;
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  border-top:1px solid var(--border);flex-shrink:0;
 }
-/* Mobile: solid, no blur — same reason as header */
 @media(max-width:768px){
   .input-area{
     background:rgba(5,7,16,.99);
-    backdrop-filter:none;
-    -webkit-backdrop-filter:none;
+    backdrop-filter:none;-webkit-backdrop-filter:none;
     padding-bottom:max(10px,calc(env(safe-area-inset-bottom)+6px));
   }
 }
@@ -402,7 +394,6 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   min-height:24px;max-height:140px;line-height:1.55;overflow-y:auto;padding-top:2px;
   -webkit-appearance:none;-webkit-tap-highlight-color:transparent}
 #msgInput::placeholder{color:var(--muted)}
-/* 16px prevents iOS auto-zoom on focus */
 @media(max-width:600px){#msgInput{font-size:16px}}
 
 .ia{display:flex;align-items:center;flex-shrink:0}
@@ -426,9 +417,7 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 
 /* ── SETTINGS PANEL ── */
 #settingsPanel{position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;
-  background:rgba(4,5,13,.8);
-  /* No backdrop-filter on overlays on mobile */
-  opacity:0;pointer-events:none;transition:opacity .25s;padding:16px}
+  background:rgba(4,5,13,.8);opacity:0;pointer-events:none;transition:opacity .25s;padding:16px}
 #settingsPanel.open{opacity:1;pointer-events:all}
 .settings-box{width:540px;max-width:100%;max-height:90vh;overflow-y:auto;
   background:var(--s2);border:1px solid var(--border2);border-radius:18px;
@@ -453,8 +442,7 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .field textarea,.field input[type=text],.field select{
   background:rgba(13,17,32,.9);border:1px solid var(--border2);border-radius:10px;
   color:var(--text);font-size:.85rem;font-family:'DM Sans',sans-serif;
-  padding:10px 13px;outline:none;transition:border-color .2s,box-shadow .2s;resize:vertical;
-  -webkit-appearance:none}
+  padding:10px 13px;outline:none;transition:border-color .2s,box-shadow .2s;resize:vertical;-webkit-appearance:none}
 .field textarea:focus,.field input:focus,.field select:focus{
   border-color:rgba(56,189,248,.4);box-shadow:0 0 0 3px rgba(56,189,248,.08)}
 .field textarea{min-height:100px;line-height:1.55}
@@ -477,7 +465,6 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   border-radius:5px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);
   color:var(--amber);font-size:.62rem;font-weight:700;font-family:'Syne',sans-serif;letter-spacing:.05em}
 
-/* ── THEME PICKER ── */
 .theme-picker{display:flex;gap:8px;flex-wrap:wrap}
 .theme-opt{display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;
   padding:8px 10px;border-radius:10px;border:1px solid var(--border2);
@@ -489,7 +476,6 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .theme-opt span{font-size:.65rem;color:var(--muted2);font-weight:600;font-family:'Syne',sans-serif}
 .theme-opt.active span{color:var(--accent)}
 
-/* ── TOAST ── */
 #toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(8px);
   display:flex;align-items:center;gap:7px;padding:9px 16px;border-radius:20px;
   font-size:.78rem;font-weight:500;color:#fff;z-index:9999;
@@ -511,10 +497,11 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   <div class="nebula n1"></div><div class="nebula n2"></div><div class="nebula n3"></div>
 </div>
 
-<div id="sidebarOverlay" onclick="closeSidebarMobile()"></div>
+<!-- Overlay sits BEHIND sidebar (z-index 299 < sidebar 400).
+     Taps on the sidebar itself will never reach the overlay.  -->
+<div id="sidebarOverlay"></div>
 
 <div class="app">
-  <!-- ══ HEADER ══ -->
   <header>
     <div class="logo">
       <svg class="logo-gem" viewBox="0 0 30 30" fill="none">
@@ -566,7 +553,6 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
     </div>
   </header>
 
-  <!-- ══ BODY ══ -->
   <div class="body">
     <div id="sidebar" class="collapsed">
       <div class="sb-head">
@@ -603,7 +589,6 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
           </div>
         </div>
       </div>
-
       <div class="input-area">
         <div class="iw">
           <textarea id="msgInput" rows="1"
@@ -627,7 +612,7 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   </div>
 </div>
 
-<!-- ══ SETTINGS PANEL ══ -->
+<!-- SETTINGS -->
 <div id="settingsPanel" onclick="onOverlayClick(event)">
   <div class="settings-box">
     <div class="sb-hdr">
@@ -648,20 +633,16 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
         <label>Тема интерфейса</label>
         <div class="theme-picker" id="themePicker">
           <div class="theme-opt" data-theme="dark" onclick="pickTheme('dark')">
-            <div class="theme-swatch" style="background:linear-gradient(135deg,#04050d,#0d1120)"></div>
-            <span>Космос</span>
+            <div class="theme-swatch" style="background:linear-gradient(135deg,#04050d,#0d1120)"></div><span>Космос</span>
           </div>
           <div class="theme-opt" data-theme="light" onclick="pickTheme('light')">
-            <div class="theme-swatch" style="background:linear-gradient(135deg,#f0f4ff,#dde4f5)"></div>
-            <span>Светлая</span>
+            <div class="theme-swatch" style="background:linear-gradient(135deg,#f0f4ff,#dde4f5)"></div><span>Светлая</span>
           </div>
           <div class="theme-opt" data-theme="green" onclick="pickTheme('green')">
-            <div class="theme-swatch" style="background:linear-gradient(135deg,#020d06,#0d2214)"></div>
-            <span>Матрица</span>
+            <div class="theme-swatch" style="background:linear-gradient(135deg,#020d06,#0d2214)"></div><span>Матрица</span>
           </div>
           <div class="theme-opt" data-theme="amber" onclick="pickTheme('amber')">
-            <div class="theme-swatch" style="background:linear-gradient(135deg,#0d0800,#261800)"></div>
-            <span>Янтарь</span>
+            <div class="theme-swatch" style="background:linear-gradient(135deg,#0d0800,#261800)"></div><span>Янтарь</span>
           </div>
         </div>
       </div>
@@ -678,20 +659,18 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 <script>
 const DEFAULT_SYS  = `""" + DEFAULT_USER_SYSTEM.replace('`','\\`') + r"""`;
 const DEFAULT_NAME = 'OmniumAI';
-
 let busy=false, totalTokens=0;
 function isMobile(){ return window.innerWidth<=768; }
 
+// ── Settings ──
 function loadSettings(){
-  return{
-    sysPrompt:    localStorage.getItem('omni_sys')   ||DEFAULT_SYS,
-    assistantName:localStorage.getItem('omni_name')  ||DEFAULT_NAME,
-    theme:        localStorage.getItem('omni_theme') ||'dark',
-  };
+  return{sysPrompt:localStorage.getItem('omni_sys')||DEFAULT_SYS,
+         assistantName:localStorage.getItem('omni_name')||DEFAULT_NAME,
+         theme:localStorage.getItem('omni_theme')||'dark'};
 }
 function saveSettingsData(s){
-  localStorage.setItem('omni_sys',  s.sysPrompt);
-  localStorage.setItem('omni_name', s.assistantName);
+  localStorage.setItem('omni_sys',s.sysPrompt);
+  localStorage.setItem('omni_name',s.assistantName);
   localStorage.setItem('omni_theme',s.theme);
 }
 function applyTheme(t){
@@ -700,70 +679,68 @@ function applyTheme(t){
 }
 function pickTheme(t){ applyTheme(t); document.getElementById('themePicker').dataset.pending=t; }
 
+// ── Chats ──
 function loadChats(){
-  try{ return JSON.parse(localStorage.getItem('omni_chats')||'null')||[newChatObj()]; }
-  catch{ return [newChatObj()]; }
+  try{return JSON.parse(localStorage.getItem('omni_chats')||'null')||[newChatObj()];}
+  catch{return[newChatObj()];}
 }
-function saveChats(){ localStorage.setItem('omni_chats',JSON.stringify(chats)); }
-function newChatObj(){ return{id:Date.now().toString(),title:'Новый чат',messages:[]}; }
-
+function saveChats(){localStorage.setItem('omni_chats',JSON.stringify(chats));}
+function newChatObj(){return{id:Date.now().toString(),title:'Новый чат',messages:[]};}
 let chats=loadChats();
 let activeChatId=localStorage.getItem('omni_active')||chats[0].id;
 if(!chats.find(c=>c.id===activeChatId)) activeChatId=chats[0].id;
-function getActive(){ return chats.find(c=>c.id===activeChatId)||chats[0]; }
-function setActive(id){ activeChatId=id; localStorage.setItem('omni_active',id); }
+function getActive(){return chats.find(c=>c.id===activeChatId)||chats[0];}
+function setActive(id){activeChatId=id;localStorage.setItem('omni_active',id);}
 
-// Stars
+// ── Stars ──
 (function(){
-  const c=document.getElementById('stars'), n=isMobile()?55:130;
+  const c=document.getElementById('stars'),n=isMobile()?50:130;
   for(let i=0;i<n;i++){
-    const s=document.createElement('div'); s.className='star';
+    const s=document.createElement('div');s.className='star';
     const sz=Math.random()*2+.4;
     s.style.cssText='left:'+(Math.random()*100)+'%;top:'+(Math.random()*100)+'%;'+
-      'width:'+sz+'px;height:'+sz+'px;--o:'+(Math.random()*.5+.1)+
+      'width:'+sz+'px;height:'+sz+'px serves;--o:'+(Math.random()*.5+.1)+
       ';--d:'+(Math.random()*4+2)+'s;animation-delay:'+(Math.random()*6)+'s';
     c.appendChild(s);
   }
 })();
 
+// ── Utils ──
 function toast(msg,type){
   const t=document.getElementById('toast');
-  t.textContent=msg; t.className='show '+(type||'info');
-  clearTimeout(t._t); t._t=setTimeout(()=>t.className='',3000);
+  t.textContent=msg;t.className='show '+(type||'info');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.className='',3000);
 }
-function ar(el){ el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,isMobile()?120:160)+'px'; }
-function hk(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} }
-function chip(el){ const i=document.getElementById('msgInput'); i.value=el.textContent.replace(/^✦\s*/,''); ar(i); i.focus(); }
-function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function ar(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,isMobile()?120:160)+'px';}
+function hk(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}
+function chip(el){const i=document.getElementById('msgInput');i.value=el.textContent.replace(/^✦\s*/,'');ar(i);i.focus();}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function updateTokens(text){
   totalTokens+=Math.round(text.trim().split(/\s+/).filter(Boolean).length*1.3);
   document.getElementById('tokenCount').textContent=totalTokens+' токенов';
 }
 
+// ── Markdown ──
 const cpIco='<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">'+
   '<rect x="5" y="5" width="9" height="9" rx="1.5"/>'+
   '<path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5"/></svg>';
-
 function md(text){
   let t=esc(text);
-  t=t.replace(/```([\w]*)\n?([\s\S]*?)```/g,(_,lang,c)=>{
-    return '<div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">'+cpIco+(lang||'code')+'</button><pre><code>'+c.trim()+'</code></pre></div>';
-  });
+  t=t.replace(/```([\w]*)\n?([\s\S]*?)```/g,(_,lang,c)=>
+    '<div class="code-wrap"><button class="code-copy" onclick="copyCode(this)">'+cpIco+(lang||'code')+'</button><pre><code>'+c.trim()+'</code></pre></div>');
   t=t.replace(/`([^`\n]+)`/g,'<code>$1</code>');
   t=t.replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>');
   t=t.replace(/\*([^*\n]+)\*/g,'<em>$1</em>');
   t=t.replace(/^#{1,3} (.+)$/gm,'<h3>$1</h3>');
   t=t.replace(/^> (.+)$/gm,'<blockquote>$1</blockquote>');
   t=t.replace(/^[-*] (.+)$/gm,'<li>$1</li>');
-  return t.split(/\n\n+/).map(p=>{
-    p=p.trim(); if(!p) return '';
-    if(/^<(div|pre|h3|li|blockquote)/.test(p)) return p;
-    return '<p>'+p.replace(/\n/g,'<br>')+'</p>';
-  }).join('');
+  return t.split(/\n\n+/).map(p=>{p=p.trim();if(!p)return'';
+    if(/^<(div|pre|h3|li|blockquote)/.test(p))return p;
+    return'<p>'+p.replace(/\n/g,'<br>')+'</p>';}).join('');
 }
 function copyCode(btn){
   navigator.clipboard.writeText(btn.closest('.code-wrap').querySelector('code').innerText).then(()=>{
-    const o=btn.innerHTML; btn.innerHTML=cpIco+'✓ ok'; btn.classList.add('copied');
+    const o=btn.innerHTML;btn.innerHTML=cpIco+'✓ ok';btn.classList.add('copied');
     setTimeout(()=>{btn.innerHTML=o;btn.classList.remove('copied');},2000);
   });
 }
@@ -775,96 +752,131 @@ const userAv='<svg width="12" height="12" viewBox="0 0 20 20" fill="none">'+
   '<circle cx="10" cy="7" r="4" fill="rgba(167,139,250,.75)"/>'+
   '<path d="M2 18c0-4 3.6-7 8-7s8 3 8 7" stroke="rgba(167,139,250,.6)" stroke-width="1.5" fill="none"/></svg>';
 
-function rmWelcome(){ const w=document.getElementById('ws'); if(w) w.remove(); }
+function rmWelcome(){const w=document.getElementById('ws');if(w)w.remove();}
 function addMsg(role,html,streaming){
   rmWelcome();
   const box=document.getElementById('chatBox');
-  const wrap=document.createElement('div'); wrap.className='mw '+role;
+  const wrap=document.createElement('div');wrap.className='mw '+role;
   const isBot=role==='bot';
   const name=isBot?(loadSettings().assistantName||DEFAULT_NAME):'Вы';
-  wrap.innerHTML=
-    '<div class="av '+(isBot?'av-bot':'av-user')+'">'+(isBot?botAv:userAv)+'</div>'+
+  wrap.innerHTML='<div class="av '+(isBot?'av-bot':'av-user')+'">'+(isBot?botAv:userAv)+'</div>'+
     '<div class="bubble '+(isBot?'bubble-bot':'bubble-user')+'">'+
-      '<div class="bname">'+esc(name)+'<button class="copy-btn" onclick="copyBub(this)">копировать</button></div>'+
-      '<div class="bc'+(streaming?' typing':'')+'">'+html+'</div>'+
-    '</div>';
-  box.appendChild(wrap); box.scrollTop=box.scrollHeight;
+    '<div class="bname">'+esc(name)+'<button class="copy-btn" onclick="copyBub(this)">копировать</button></div>'+
+    '<div class="bc'+(streaming?' typing':'')+'">'+html+'</div></div>';
+  box.appendChild(wrap);box.scrollTop=box.scrollHeight;
   return wrap.querySelector('.bc');
 }
 function addThinking(){
-  rmWelcome();
-  const box=document.getElementById('chatBox');
-  const wrap=document.createElement('div'); wrap.id='thinking'; wrap.className='mw bot';
+  rmWelcome();const box=document.getElementById('chatBox');
+  const wrap=document.createElement('div');wrap.id='thinking';wrap.className='mw bot';
   wrap.innerHTML='<div class="av av-bot">'+botAv+'</div>'+
     '<div class="bubble bubble-bot"><div class="bname">'+esc(loadSettings().assistantName||DEFAULT_NAME)+'</div>'+
     '<div class="dots"><span></span><span></span><span></span></div></div>';
-  box.appendChild(wrap); box.scrollTop=box.scrollHeight;
+  box.appendChild(wrap);box.scrollTop=box.scrollHeight;
 }
-function rmThinking(){ const e=document.getElementById('thinking'); if(e) e.remove(); }
+function rmThinking(){const e=document.getElementById('thinking');if(e)e.remove();}
 function copyBub(btn){
   navigator.clipboard.writeText(btn.closest('.bubble').querySelector('.bc').innerText).then(()=>{
-    btn.textContent='✓ скопировано'; btn.classList.add('copied');
+    btn.textContent='✓ скопировано';btn.classList.add('copied');
     setTimeout(()=>{btn.textContent='копировать';btn.classList.remove('copied');},2000);
   }).catch(()=>toast('Не удалось скопировать','err'));
 }
 
 // ── Sidebar ──
 let sidebarOpen=false;
+const $sidebar=()=>document.getElementById('sidebar');
+const $overlay=()=>document.getElementById('sidebarOverlay');
+
 function toggleSidebar(){
   sidebarOpen=!sidebarOpen;
-  document.getElementById('sidebar').classList.toggle('collapsed',!sidebarOpen);
+  $sidebar().classList.toggle('collapsed',!sidebarOpen);
   document.getElementById('sidebarToggle').classList.toggle('active',sidebarOpen);
-  document.getElementById('sidebarOverlay').classList.toggle('visible',sidebarOpen&&isMobile());
+  if(isMobile()){
+    // Overlay shown only on mobile, and it must NOT cover the sidebar itself.
+    // We handle "tap outside" by listening on the overlay which sits behind sidebar (z299).
+    if(sidebarOpen){
+      $overlay().style.opacity='1';
+      $overlay().style.pointerEvents='all';
+      // Close when tapping the dim area (outside the sidebar)
+      $overlay().onclick=closeSidebarMobile;
+    } else {
+      $overlay().style.opacity='0';
+      $overlay().style.pointerEvents='none';
+      $overlay().onclick=null;
+    }
+  }
   if(sidebarOpen) renderTabs();
 }
+
 function closeSidebarMobile(){
-  if(!isMobile()) return;
   sidebarOpen=false;
-  document.getElementById('sidebar').classList.add('collapsed');
+  $sidebar().classList.add('collapsed');
   document.getElementById('sidebarToggle').classList.remove('active');
-  document.getElementById('sidebarOverlay').classList.remove('visible');
+  $overlay().style.opacity='0';
+  $overlay().style.pointerEvents='none';
+  $overlay().onclick=null;
 }
+
 window.addEventListener('resize',()=>{
-  if(!isMobile()) document.getElementById('sidebarOverlay').classList.remove('visible');
+  if(!isMobile()){
+    $overlay().style.opacity='0';
+    $overlay().style.pointerEvents='none';
+  }
 });
 
 function renderTabs(){
-  const list=document.getElementById('tabList'); list.innerHTML='';
+  const list=document.getElementById('tabList');list.innerHTML='';
   chats.forEach(chat=>{
     const div=document.createElement('div');
     div.className='tab-item'+(chat.id===activeChatId?' active':'');
-    div.innerHTML='<span class="tab-icon">💬</span><span class="tab-label">'+esc(chat.title)+'</span>'+
-      (chats.length>1?'<button class="tab-del" onclick="deleteChat(\''+chat.id+'\',event)" title="Удалить">✕</button>':'');
-    div.onclick=(e)=>{ if(!e.target.classList.contains('tab-del')){ switchChat(chat.id); if(isMobile()) closeSidebarMobile(); } };
+
+    const icon=document.createElement('span');icon.className='tab-icon';icon.textContent='💬';
+    const label=document.createElement('span');label.className='tab-label';label.textContent=chat.title;
+
+    div.appendChild(icon);div.appendChild(label);
+
+    if(chats.length>1){
+      const del=document.createElement('button');
+      del.className='tab-del';del.title='Удалить';del.textContent='✕';
+      del.addEventListener('click',e=>{e.stopPropagation();deleteChat(chat.id);});
+      div.appendChild(del);
+    }
+
+    div.addEventListener('click',()=>{
+      switchChat(chat.id);
+      if(isMobile()) closeSidebarMobile();
+    });
+
     list.appendChild(div);
   });
 }
+
 function newChat(){
-  const chat=newChatObj(); chats.unshift(chat); saveChats();
-  switchChat(chat.id); renderTabs();
+  const chat=newChatObj();chats.unshift(chat);saveChats();
+  switchChat(chat.id);renderTabs();
   if(isMobile()) closeSidebarMobile();
   toast('Новый чат создан','ok');
 }
 function switchChat(id){
-  setActive(id); renderTabs(); rebuildChatBox();
-  totalTokens=0; document.getElementById('tokenCount').textContent='0 токенов';
+  setActive(id);renderTabs();rebuildChatBox();
+  totalTokens=0;document.getElementById('tokenCount').textContent='0 токенов';
 }
-function deleteChat(id,e){
-  e.stopPropagation();
+function deleteChat(id){
   chats=chats.filter(c=>c.id!==id);
   if(!chats.length) chats=[newChatObj()];
   if(activeChatId===id) setActive(chats[0].id);
-  saveChats(); renderTabs(); rebuildChatBox();
+  saveChats();renderTabs();rebuildChatBox();
   toast('Чат удалён','info');
 }
 function rebuildChatBox(){
-  const box=document.getElementById('chatBox'), msgs=getActive().messages;
-  if(!msgs.length){ box.innerHTML=welcomeHTML(); return; }
+  const box=document.getElementById('chatBox'),msgs=getActive().messages;
+  if(!msgs.length){box.innerHTML=welcomeHTML();return;}
   box.innerHTML='';
-  msgs.forEach(m=>{ if(m.role==='user') addMsg('user',esc(m.content),false); else if(m.role==='assistant') addMsg('bot',md(m.content),false); });
+  msgs.forEach(m=>{if(m.role==='user')addMsg('user',esc(m.content),false);
+    else if(m.role==='assistant')addMsg('bot',md(m.content),false);});
 }
 function welcomeHTML(){
-  return '<div class="welcome" id="ws">'+
+  return'<div class="welcome" id="ws">'+
     '<div class="w-logo"><svg viewBox="0 0 72 72" fill="none">'+
     '<defs><linearGradient id="wg2" x1="0" y1="0" x2="72" y2="72" gradientUnits="userSpaceOnUse">'+
     '<stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#a78bfa"/></linearGradient></defs>'+
@@ -881,106 +893,95 @@ function welcomeHTML(){
 }
 function autoTitle(chatId,text){
   const chat=chats.find(c=>c.id===chatId);
-  if(!chat||chat.messages.length>2) return;
+  if(!chat||chat.messages.length>2)return;
   chat.title=text.slice(0,36)+(text.length>36?'…':'');
-  saveChats(); renderTabs();
+  saveChats();renderTabs();
 }
 
-// ── Settings ──
+// ── Settings panel ──
 function openSettings(){
   const s=loadSettings();
-  document.getElementById('sysPromptInput').value    =s.sysPrompt;
+  document.getElementById('sysPromptInput').value=s.sysPrompt;
   document.getElementById('assistantNameInput').value=s.assistantName;
   document.getElementById('themePicker').dataset.pending=s.theme;
   applyTheme(s.theme);
   document.getElementById('settingsPanel').classList.add('open');
 }
-function closeSettings(){ document.getElementById('settingsPanel').classList.remove('open'); }
-function onOverlayClick(e){ if(e.target===document.getElementById('settingsPanel')) closeSettings(); }
+function closeSettings(){document.getElementById('settingsPanel').classList.remove('open');}
+function onOverlayClick(e){if(e.target===document.getElementById('settingsPanel'))closeSettings();}
 function saveSettings(){
   const theme=document.getElementById('themePicker').dataset.pending||loadSettings().theme;
-  const s={
-    sysPrompt:    document.getElementById('sysPromptInput').value.trim()||DEFAULT_SYS,
-    assistantName:document.getElementById('assistantNameInput').value.trim()||DEFAULT_NAME,
-    theme,
-  };
-  saveSettingsData(s); applyTheme(theme); closeSettings();
+  const s={sysPrompt:document.getElementById('sysPromptInput').value.trim()||DEFAULT_SYS,
+           assistantName:document.getElementById('assistantNameInput').value.trim()||DEFAULT_NAME,theme};
+  saveSettingsData(s);applyTheme(theme);closeSettings();
   toast('Настройки сохранены ✓','ok');
 }
 function resetSettings(){
-  document.getElementById('sysPromptInput').value    =DEFAULT_SYS;
+  document.getElementById('sysPromptInput').value=DEFAULT_SYS;
   document.getElementById('assistantNameInput').value=DEFAULT_NAME;
   pickTheme('dark');
 }
 
 // ── Send ──
 async function send(){
-  if(busy) return;
+  if(busy)return;
   const inp=document.getElementById('msgInput');
-  const text=inp.value.trim(); if(!text) return;
-  inp.value=''; inp.style.height='auto';
-  if(isMobile()) inp.blur();
+  const text=inp.value.trim();if(!text)return;
+  inp.value='';inp.style.height='auto';
+  if(isMobile())inp.blur();
 
   const chat=getActive();
-  addMsg('user',esc(text),false); updateTokens(text);
+  addMsg('user',esc(text),false);updateTokens(text);
   chat.messages.push({role:'user',content:text});
   autoTitle(chat.id,text);
-  if(chat.messages.length>40) chat.messages=chat.messages.slice(-40);
+  if(chat.messages.length>40)chat.messages=chat.messages.slice(-40);
   saveChats();
 
-  busy=true;
-  const btn=document.getElementById('sendBtn');
-  btn.disabled=true; btn.classList.add('pulsing');
-  addThinking();
-
+  busy=true;const btn=document.getElementById('sendBtn');
+  btn.disabled=true;btn.classList.add('pulsing');addThinking();
   try{
-    const res=await fetch('/api/chat',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({messages:chat.messages,sys_prompt:loadSettings().sysPrompt})
-    });
+    const res=await fetch('/api/chat',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({messages:chat.messages,sys_prompt:loadSettings().sysPrompt})});
     rmThinking();
     if(!res.ok){
       let msg='Ошибка сервера';
       try{const e=await res.json();msg=e.error||msg;}catch(_){}
-      addMsg('bot','<strong>⚠️ '+esc(msg)+'</strong>',false); toast(msg,'err'); return;
+      addMsg('bot','<strong>⚠️ '+esc(msg)+'</strong>',false);toast(msg,'err');return;
     }
     const reader=res.body.getReader(),dec=new TextDecoder();
     let raw='',contentEl=null,sseBuf='';
     while(true){
-      const{done,value}=await reader.read(); if(done) break;
+      const{done,value}=await reader.read();if(done)break;
       sseBuf+=dec.decode(value,{stream:true});
-      const lines=sseBuf.split('\n'); sseBuf=lines.pop();
+      const lines=sseBuf.split('\n');sseBuf=lines.pop();
       for(const line of lines){
-        const l=line.trim(); if(!l.startsWith('data:')) continue;
-        const payload=l.slice(5).trim();
-        if(payload==='[DONE]'){sseBuf='';break;}
+        const l=line.trim();if(!l.startsWith('data:'))continue;
+        const payload=l.slice(5).trim();if(payload==='[DONE]'){sseBuf='';break;}
         try{
           const obj=JSON.parse(payload);
           if(obj.error){toast(obj.error,'err');break;}
-          const delta=obj.delta||''; if(!delta) continue;
+          const delta=obj.delta||'';if(!delta)continue;
           raw+=delta;
-          if(!contentEl) contentEl=addMsg('bot',md(raw),true);
+          if(!contentEl)contentEl=addMsg('bot',md(raw),true);
           else contentEl.innerHTML=md(raw);
           document.getElementById('chatBox').scrollTop=99999;
         }catch(_){}
       }
     }
     if(contentEl){contentEl.classList.remove('typing');contentEl.innerHTML=md(raw);}
-    else if(raw) addMsg('bot',md(raw),false);
-    if(raw){ chat.messages.push({role:'assistant',content:raw}); saveChats(); updateTokens(raw); }
+    else if(raw)addMsg('bot',md(raw),false);
+    if(raw){chat.messages.push({role:'assistant',content:raw});saveChats();updateTokens(raw);}
   }catch(err){
-    rmThinking();
-    addMsg('bot','<strong>⚠️ Ошибка соединения.</strong>',false);
-    toast('Ошибка соединения','err'); console.error(err);
-  }finally{
-    busy=false; btn.disabled=false; btn.classList.remove('pulsing');
-  }
+    rmThinking();addMsg('bot','<strong>⚠️ Ошибка соединения.</strong>',false);
+    toast('Ошибка соединения','err');console.error(err);
+  }finally{busy=false;btn.disabled=false;btn.classList.remove('pulsing');}
 }
 
 function clearChat(){
-  const chat=getActive(); chat.messages=[]; chat.title='Новый чат'; saveChats();
-  totalTokens=0; document.getElementById('tokenCount').textContent='0 токенов';
-  document.getElementById('chatBox').innerHTML=welcomeHTML(); renderTabs();
+  const chat=getActive();chat.messages=[];chat.title='Новый чат';saveChats();
+  totalTokens=0;document.getElementById('tokenCount').textContent='0 токенов';
+  document.getElementById('chatBox').innerHTML=welcomeHTML();renderTabs();
   toast('Чат очищен','ok');
 }
 function exportChat(){
@@ -988,23 +989,19 @@ function exportChat(){
   if(!chat.messages.length){toast('Нет сообщений для экспорта','err');return;}
   const name=loadSettings().assistantName||DEFAULT_NAME;
   let out=`# ${chat.title}\n> Экспортировано из OmniumAI · OmniNet 1.0 · ${new Date().toLocaleString('ru')}\n\n---\n\n`;
-  chat.messages.forEach(m=>{
-    out+=`### ${m.role==='user'?'👤 **Вы**':'✦ **'+name+'**'}\n\n${m.content}\n\n---\n\n`;
-  });
+  chat.messages.forEach(m=>{out+=`### ${m.role==='user'?'👤 **Вы**':'✦ **'+name+'**'}\n\n${m.content}\n\n---\n\n`;});
   const blob=new Blob([out],{type:'text/markdown;charset=utf-8'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href=url; a.download=`omniumai-${chat.title.replace(/[^а-яa-z0-9]/gi,'_').slice(0,30)}-${Date.now()}.md`;
-  a.click(); URL.revokeObjectURL(url);
-  toast('Чат экспортирован ✓','ok');
+  a.href=url;a.download=`omniumai-${chat.title.replace(/[^а-яa-z0-9]/gi,'_').slice(0,30)}-${Date.now()}.md`;
+  a.click();URL.revokeObjectURL(url);toast('Чат экспортирован ✓','ok');
 }
 
-(function(){ applyTheme(loadSettings().theme); rebuildChatBox(); renderTabs(); })();
+(function(){applyTheme(loadSettings().theme);rebuildChatBox();renderTabs();})();
 </script>
 </body>
 </html>"""
 
-# ── Flask ────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
 app.json.ensure_ascii = False
 
@@ -1023,10 +1020,7 @@ def chat():
     user_sys = data.get("sys_prompt", DEFAULT_USER_SYSTEM).strip()
     if not messages:
         return jsonify({"error": "Нет сообщений"}), 400
-
-    combined = HIDDEN_SYSTEM
-    if user_sys:
-        combined += "\n\n" + user_sys
+    combined = HIDDEN_SYSTEM + ("\n\n" + user_sys if user_sys else "")
     full = [{"role": "system", "content": combined}] + messages
 
     def generate():
@@ -1034,8 +1028,7 @@ def chat():
             client = Groq(api_key=GROQ_API_KEY)
             stream = client.chat.completions.create(
                 model=GROQ_MODEL, messages=full,
-                max_tokens=1024, temperature=0.75, stream=True
-            )
+                max_tokens=1024, temperature=0.75, stream=True)
             for chunk in stream:
                 delta = ""
                 if chunk.choices and chunk.choices[0].delta:
@@ -1047,11 +1040,9 @@ def chat():
             yield "data: " + json.dumps({"error": str(e)[:200]}, ensure_ascii=False) + "\n\n"
             yield "data: [DONE]\n\n"
 
-    return Response(
-        stream_with_context(generate()),
+    return Response(stream_with_context(generate()),
         mimetype="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
-    )
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 @app.route("/api/clear", methods=["POST"])
 def clear():
