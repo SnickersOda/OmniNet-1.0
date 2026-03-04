@@ -108,6 +108,11 @@ html,body{height:100%;height:-webkit-fill-available;background:var(--bg);color:v
   background-size:60px 60px;
   mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,black,transparent)}
 
+/* MOBILE: убираем все тяжёлые GPU-слои на мобиле */
+@media(max-width:768px){
+  #cosmos{display:none}
+}
+
 /* ── APP SHELL ── */
 .app{position:relative;z-index:1;height:100vh;height:-webkit-fill-available;
   display:flex;flex-direction:column}
@@ -115,10 +120,15 @@ html,body{height:100%;height:-webkit-fill-available;background:var(--bg);color:v
 /* ── HEADER ── */
 header{height:var(--header-h);display:flex;align-items:center;justify-content:space-between;
   padding:0 16px;padding-top:env(safe-area-inset-top,0px);
-  background:rgba(4,5,13,.85);backdrop-filter:blur(24px);
+  background:rgba(4,5,13,.85);
   border-bottom:1px solid var(--border2);flex-shrink:0;gap:8px;z-index:200;position:relative}
 header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,var(--accent),var(--violet),transparent);opacity:.3}
+
+/* Desktop header: keep backdrop-filter */
+@media(min-width:769px){
+  header{backdrop-filter:blur(24px)}
+}
 
 .logo{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .logo-gem{width:28px;height:28px;flex-shrink:0}
@@ -136,14 +146,12 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   animation:pdot 2s ease-in-out infinite;flex-shrink:0}
 @keyframes pdot{0%,100%{opacity:1}50%{opacity:.4}}
 
-/* Hide model pill on very small screens */
 @media(max-width:380px){.model-pill{display:none}}
 
 .hdr-right{display:flex;align-items:center;gap:5px}
 #tokenCount{font-size:.62rem;color:var(--muted);padding:3px 7px;border-radius:6px;
   background:var(--s2);border:1px solid var(--border);font-family:'JetBrains Mono',monospace;
   white-space:nowrap}
-/* Hide token count on mobile */
 @media(max-width:600px){#tokenCount{display:none}}
 
 .hdr-btn{display:flex;align-items:center;gap:4px;padding:6px 10px;border-radius:8px;
@@ -154,35 +162,78 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .hdr-btn:hover{border-color:var(--border3);color:var(--text);background:rgba(255,255,255,.07)}
 .hdr-btn.active{border-color:rgba(56,189,248,.4);color:var(--accent);background:rgba(56,189,248,.08)}
 .hdr-btn.danger:hover{border-color:rgba(251,113,133,.35);color:var(--rose);background:rgba(251,113,133,.07)}
-/* Hide text labels on mobile header buttons */
 .hdr-btn .btn-label{display:inline}
 @media(max-width:600px){.hdr-btn .btn-label{display:none}.hdr-btn{padding:6px 8px}}
 @media(max-width:400px){.hdr-btn.hide-xs{display:none}}
 
 /* ── BODY ── */
-.body{flex:1;display:flex;overflow:hidden;min-height:0}
+.body{flex:1;display:flex;overflow:hidden;min-height:0;position:relative}
 
-/* ── SIDEBAR ── */
-#sidebarOverlay{position:fixed;inset:0;z-index:299;background:rgba(4,5,13,.6);
-  backdrop-filter:blur(4px);opacity:0;pointer-events:none;transition:opacity .25s}
-#sidebarOverlay.visible{opacity:1;pointer-events:all}
+/* ══════════════════════════════════════════
+   SIDEBAR — полностью переписан для мобиле
+   ══════════════════════════════════════════ */
 
-#sidebar{width:240px;flex-shrink:0;display:flex;flex-direction:column;
-  background:rgba(8,11,21,.97);border-right:1px solid var(--border2);
-  transition:transform .28s cubic-bezier(.22,1,.36,1),opacity .25s;overflow:hidden;
-  z-index:300}
-/* Desktop: sidebar collapses inline */
-#sidebar.collapsed{width:0;opacity:0;pointer-events:none}
+/* Overlay: всегда под sidebar */
+#sidebarOverlay{
+  display:none;
+  position:fixed;
+  top:0;left:0;right:0;bottom:0;
+  z-index:298;
+  background:rgba(4,5,13,.6);
+}
+#sidebarOverlay.visible{
+  display:block;
+}
 
-/* Mobile: sidebar is a drawer overlay */
+/* Desktop sidebar */
+#sidebar{
+  width:240px;
+  flex-shrink:0;
+  display:flex;
+  flex-direction:column;
+  background:rgba(8,11,21,.97);
+  border-right:1px solid var(--border2);
+  overflow:hidden;
+  transition:width .28s;
+  /* NO backdrop-filter, NO filter on desktop either for safety */
+}
+#sidebar.collapsed{
+  width:0;
+  pointer-events:none;
+}
+
+/* MOBILE sidebar — drawer через left, без transform, без opacity-анимации */
 @media(max-width:768px){
   #sidebar{
-    position:fixed;top:0;left:0;bottom:0;width:280px;
-    transform:translateX(-100%);opacity:1;
+    position:fixed;
+    top:0;
+    left:-290px;   /* скрыт за экраном */
+    bottom:0;
+    width:280px;
+    z-index:299;
+    /* NO transform */
+    /* NO will-change */
+    /* NO filter */
+    /* NO backdrop-filter */
+    /* NO opacity transition */
+    transition:left .28s ease;
     padding-top:env(safe-area-inset-top,0px);
+    background:#080b15;  /* сплошной цвет, без rgba */
+    pointer-events:none;
   }
-  #sidebar.collapsed{width:280px;transform:translateX(-100%);opacity:1;pointer-events:none}
-  #sidebar:not(.collapsed){transform:translateX(0);pointer-events:all}
+
+  /* Открыт */
+  #sidebar.sb-open{
+    left:0;
+    pointer-events:all;
+  }
+
+  /* collapsed на мобиле = просто убеждаемся что закрыт */
+  #sidebar.collapsed{
+    width:280px;   /* ширину не меняем на мобиле */
+    left:-290px;
+    pointer-events:none;
+  }
 }
 
 .sb-head{padding:14px 12px 10px;display:flex;align-items:center;justify-content:space-between}
@@ -199,7 +250,8 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 #tabList::-webkit-scrollbar-thumb{background:var(--s4)}
 
 .tab-item{display:flex;align-items:center;gap:7px;padding:10px 10px;border-radius:9px;
-  cursor:pointer;margin-bottom:3px;transition:all .18s;border:1px solid transparent;
+  cursor:pointer;margin-bottom:3px;transition:background .18s,border-color .18s;
+  border:1px solid transparent;
   font-size:.82rem;color:var(--muted2);position:relative;
   -webkit-tap-highlight-color:transparent;touch-action:manipulation;min-height:42px}
 .tab-item:hover{background:rgba(255,255,255,.04);color:var(--text)}
@@ -212,7 +264,6 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .tab-item:hover .tab-del{opacity:1}
 .tab-del:hover{background:rgba(251,113,133,.15);color:var(--rose)}
-/* Always show delete on touch devices */
 @media(hover:none){.tab-del{opacity:.5}}
 
 /* ── CHAT AREA ── */
@@ -287,7 +338,6 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   background:rgba(255,255,255,.03);color:var(--muted);transition:all .15s;
   opacity:0;white-space:nowrap;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .bubble:hover .copy-btn{opacity:1}
-/* Always show on touch */
 @media(hover:none){.copy-btn{opacity:.4}}
 .copy-btn:hover{border-color:var(--border3);color:var(--text)}
 .copy-btn.copied{color:var(--emerald);border-color:rgba(52,211,153,.3);opacity:1}
@@ -303,7 +353,6 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   border:1px solid rgba(56,189,248,.2);background:rgba(4,5,13,.8);color:var(--muted2);
   transition:all .18s;display:flex;align-items:center;gap:4px;
   touch-action:manipulation;-webkit-tap-highlight-color:transparent;min-height:28px}
-/* Always visible on touch */
 @media(hover:none){.code-copy{opacity:1}}
 @media(hover:hover){.code-copy{opacity:0}.code-wrap:hover .code-copy{opacity:1}}
 .code-copy:hover{border-color:var(--accent);color:var(--accent);background:rgba(56,189,248,.08)}
@@ -336,8 +385,12 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 
 /* ── INPUT AREA ── */
 .input-area{padding:10px 16px;padding-bottom:calc(12px + var(--input-safe));
-  position:relative;background:rgba(4,5,13,.85);backdrop-filter:blur(24px);
+  position:relative;background:rgba(4,5,13,.85);
   border-top:1px solid var(--border);flex-shrink:0}
+/* Desktop: keep backdrop-filter */
+@media(min-width:769px){
+  .input-area{backdrop-filter:blur(24px)}
+}
 .input-area::before{content:'';position:absolute;top:-1px;left:10%;right:10%;height:1px;
   background:linear-gradient(90deg,transparent,rgba(56,189,248,.18),rgba(167,139,250,.18),transparent)}
 @media(max-width:600px){.input-area{padding:8px 12px;padding-bottom:calc(10px + var(--input-safe))}}
@@ -351,7 +404,6 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   min-height:24px;max-height:140px;line-height:1.55;overflow-y:auto;padding-top:2px;
   -webkit-appearance:none;-webkit-tap-highlight-color:transparent}
 #msgInput::placeholder{color:var(--muted)}
-/* Slightly bigger font on mobile to prevent iOS zoom */
 @media(max-width:600px){#msgInput{font-size:16px}}
 
 .ia{display:flex;align-items:center;flex-shrink:0}
@@ -371,13 +423,16 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   text-align:center;opacity:.5;display:flex;align-items:center;justify-content:center;gap:8px}
 .kbg{background:var(--s2);border:1px solid var(--border2);border-radius:4px;
   padding:1px 5px;font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted2)}
-/* Hide keyboard hint on mobile */
 @media(max-width:600px){.hint{display:none}}
 
 /* ── SETTINGS PANEL ── */
 #settingsPanel{position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;
-  background:rgba(4,5,13,.75);backdrop-filter:blur(12px);
+  background:rgba(4,5,13,.75);
   opacity:0;pointer-events:none;transition:opacity .25s;padding:16px}
+/* Desktop: keep backdrop-filter on settings */
+@media(min-width:769px){
+  #settingsPanel{backdrop-filter:blur(12px)}
+}
 #settingsPanel.open{opacity:1;pointer-events:all}
 .settings-box{width:540px;max-width:100%;max-height:90vh;overflow-y:auto;
   background:var(--s2);border:1px solid var(--border2);border-radius:18px;
@@ -407,7 +462,6 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .field textarea:focus,.field input:focus,.field select:focus{
   border-color:rgba(56,189,248,.4);box-shadow:0 0 0 3px rgba(56,189,248,.08)}
 .field textarea{min-height:100px;line-height:1.55}
-/* Bigger font on mobile to avoid iOS zoom */
 @media(max-width:600px){
   .field textarea,.field input[type=text],.field select{font-size:16px}
 }
@@ -445,19 +499,17 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .theme-opt.active span{color:var(--accent)}
 
 /* ── TOAST ── */
-#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(8px);
-  display:flex;align-items:center;gap:7px;padding:9px 16px;border-radius:20px;
+#toast{position:fixed;bottom:80px;left:50%;
+  margin-left:-140px;width:280px;text-align:center;
+  display:none;padding:9px 16px;border-radius:20px;
   font-size:.78rem;font-weight:500;color:#fff;z-index:9999;
-  opacity:0;transition:opacity .28s,transform .28s;pointer-events:none;white-space:nowrap;
   box-shadow:0 8px 28px rgba(0,0,0,.4)}
-#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.show{display:flex;align-items:center;justify-content:center;gap:7px}
 #toast.ok{background:linear-gradient(135deg,#065f46,#059669);border:1px solid rgba(52,211,153,.2)}
 #toast.err{background:linear-gradient(135deg,#7f1d1d,#dc2626);border:1px solid rgba(251,113,133,.2)}
 #toast.info{background:linear-gradient(135deg,#1e3a5f,#0284c7);border:1px solid rgba(56,189,248,.2)}
-@media(max-width:600px){#toast{bottom:90px;font-size:.74rem;padding:8px 14px;max-width:90vw;white-space:normal;text-align:center}}
+@media(max-width:600px){#toast{bottom:90px;font-size:.74rem;padding:8px 14px;max-width:90vw;margin-left:0;left:5%;width:90%}}
 
-/* ── MOBILE BOTTOM NAV (optional quick actions) ── */
-/* Prevents content from being hidden behind mobile browser chrome */
 @supports(padding: max(0px)){
   .input-area{padding-bottom:max(12px, calc(env(safe-area-inset-bottom) + 8px))}
 }
@@ -470,7 +522,7 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   <div class="nebula n1"></div><div class="nebula n2"></div><div class="nebula n3"></div>
 </div>
 
-<!-- Sidebar overlay for mobile -->
+<!-- Overlay: кликается для закрытия сайдбара, z-index < sidebar -->
 <div id="sidebarOverlay" onclick="closeSidebarMobile()"></div>
 
 <div class="app">
@@ -655,7 +707,6 @@ const DEFAULT_NAME = 'OmniumAI';
 let busy        = false;
 let totalTokens = 0;
 
-// ── Определяем мобильный режим ──
 function isMobile() { return window.innerWidth <= 768; }
 
 // ── Settings ──
@@ -700,12 +751,12 @@ function getActive() { return chats.find(c => c.id === activeChatId) || chats[0]
 function setActive(id) { activeChatId = id; localStorage.setItem('omni_active', id); }
 
 // ═══════════════════════════════════════════════════════
-//  ЗВЁЗДЫ
+//  ЗВЁЗДЫ (только desktop)
 // ═══════════════════════════════════════════════════════
 (function() {
+  if (window.innerWidth <= 768) return; // не создаём на мобиле
   const c = document.getElementById('stars');
-  const count = isMobile() ? 60 : 130;
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < 130; i++) {
     const s = document.createElement('div');
     s.className = 'star';
     const sz = Math.random() * 2 + .4;
@@ -721,19 +772,21 @@ function setActive(id) { activeChatId = id; localStorage.setItem('omni_active', 
 // ═══════════════════════════════════════════════════════
 function toast(msg, type) {
   const t = document.getElementById('toast');
-  t.textContent = msg; t.className = 'show '+(type||'info');
-  clearTimeout(t._t); t._t = setTimeout(()=>t.className='', 3000);
+  t.textContent = msg;
+  t.className = 'show ' + (type || 'info');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => { t.className = ''; }, 3000);
 }
 function ar(el) {
-  el.style.height='auto'; el.style.height=Math.min(el.scrollHeight, isMobile()?120:160)+'px';
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, isMobile() ? 120 : 160) + 'px';
 }
 function hk(e) {
-  // On mobile, Enter should send; on desktop, Shift+Enter = new line
-  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 }
 function chip(el) {
-  const inp=document.getElementById('msgInput');
-  inp.value=el.textContent.replace(/^✦\s*/,''); ar(inp); inp.focus();
+  const inp = document.getElementById('msgInput');
+  inp.value = el.textContent.replace(/^✦\s*/, ''); ar(inp); inp.focus();
 }
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function updateTokens(text) {
@@ -761,17 +814,17 @@ function md(text) {
   t = t.replace(/^#{1,3} (.+)$/gm,    '<h3>$1</h3>');
   t = t.replace(/^> (.+)$/gm,         '<blockquote>$1</blockquote>');
   t = t.replace(/^[-*] (.+)$/gm,      '<li>$1</li>');
-  return t.split(/\n\n+/).map(p=>{
-    p=p.trim(); if(!p) return '';
-    if(/^<(div|pre|h3|li|blockquote)/.test(p)) return p;
-    return '<p>'+p.replace(/\n/g,'<br>')+'</p>';
+  return t.split(/\n\n+/).map(p => {
+    p = p.trim(); if (!p) return '';
+    if (/^<(div|pre|h3|li|blockquote)/.test(p)) return p;
+    return '<p>' + p.replace(/\n/g, '<br>') + '</p>';
   }).join('');
 }
 function copyCode(btn) {
   const code = btn.closest('.code-wrap').querySelector('code').innerText;
-  navigator.clipboard.writeText(code).then(()=>{
-    const orig=btn.innerHTML; btn.innerHTML=cpIco+'✓ ok'; btn.classList.add('copied');
-    setTimeout(()=>{btn.innerHTML=orig;btn.classList.remove('copied');},2000);
+  navigator.clipboard.writeText(code).then(() => {
+    const orig = btn.innerHTML; btn.innerHTML = cpIco + '✓ ok'; btn.classList.add('copied');
+    setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied'); }, 2000);
   });
 }
 
@@ -788,22 +841,22 @@ const userAv = '<svg width="12" height="12" viewBox="0 0 20 20" fill="none">'+
 // ═══════════════════════════════════════════════════════
 //  РЕНДЕР СООБЩЕНИЙ
 // ═══════════════════════════════════════════════════════
-function rmWelcome() { const w=document.getElementById('ws'); if(w) w.remove(); }
+function rmWelcome() { const w = document.getElementById('ws'); if (w) w.remove(); }
 
 function addMsg(role, html, streaming) {
   rmWelcome();
   const box  = document.getElementById('chatBox');
   const wrap = document.createElement('div');
-  wrap.className = 'mw '+role;
-  const isBot = role==='bot';
-  const name  = isBot ? (loadSettings().assistantName||DEFAULT_NAME) : 'Вы';
+  wrap.className = 'mw ' + role;
+  const isBot = role === 'bot';
+  const name  = isBot ? (loadSettings().assistantName || DEFAULT_NAME) : 'Вы';
   wrap.innerHTML =
-    '<div class="av '+(isBot?'av-bot':'av-user')+'">'+(isBot?botAv:userAv)+'</div>'+
-    '<div class="bubble '+(isBot?'bubble-bot':'bubble-user')+'">'+
-      '<div class="bname">'+esc(name)+
-        '<button class="copy-btn" onclick="copyBub(this)">копировать</button>'+
-      '</div>'+
-      '<div class="bc'+(streaming?' typing':'')+'">'+html+'</div>'+
+    '<div class="av ' + (isBot ? 'av-bot' : 'av-user') + '">' + (isBot ? botAv : userAv) + '</div>' +
+    '<div class="bubble ' + (isBot ? 'bubble-bot' : 'bubble-user') + '">' +
+      '<div class="bname">' + esc(name) +
+        '<button class="copy-btn" onclick="copyBub(this)">копировать</button>' +
+      '</div>' +
+      '<div class="bc' + (streaming ? ' typing' : '') + '">' + html + '</div>' +
     '</div>';
   box.appendChild(wrap);
   box.scrollTop = box.scrollHeight;
@@ -814,70 +867,90 @@ function addThinking() {
   rmWelcome();
   const box  = document.getElementById('chatBox');
   const wrap = document.createElement('div');
-  wrap.id='thinking'; wrap.className='mw bot';
-  wrap.innerHTML = '<div class="av av-bot">'+botAv+'</div>'+
-    '<div class="bubble bubble-bot"><div class="bname">'+
-    esc(loadSettings().assistantName||DEFAULT_NAME)+'</div>'+
+  wrap.id = 'thinking'; wrap.className = 'mw bot';
+  wrap.innerHTML = '<div class="av av-bot">' + botAv + '</div>' +
+    '<div class="bubble bubble-bot"><div class="bname">' +
+    esc(loadSettings().assistantName || DEFAULT_NAME) + '</div>' +
     '<div class="dots"><span></span><span></span><span></span></div></div>';
   box.appendChild(wrap); box.scrollTop = box.scrollHeight;
 }
-function rmThinking() { const e=document.getElementById('thinking'); if(e) e.remove(); }
+function rmThinking() { const e = document.getElementById('thinking'); if (e) e.remove(); }
 
 function copyBub(btn) {
   const text = btn.closest('.bubble').querySelector('.bc').innerText;
-  navigator.clipboard.writeText(text).then(()=>{
-    btn.textContent='✓ скопировано'; btn.classList.add('copied');
-    setTimeout(()=>{btn.textContent='копировать';btn.classList.remove('copied');},2000);
-  }).catch(()=>toast('Не удалось скопировать','err'));
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = '✓ скопировано'; btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'копировать'; btn.classList.remove('copied'); }, 2000);
+  }).catch(() => toast('Не удалось скопировать', 'err'));
 }
 
 // ═══════════════════════════════════════════════════════
-//  SIDEBAR / TABS
+//  SIDEBAR — полностью переписан
 // ═══════════════════════════════════════════════════════
 let sidebarOpen = false;
 
 function toggleSidebar() {
   sidebarOpen = !sidebarOpen;
-  const sb = document.getElementById('sidebar');
+  const sb      = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebarOverlay');
-  sb.classList.toggle('collapsed', !sidebarOpen);
-  document.getElementById('sidebarToggle').classList.toggle('active', sidebarOpen);
-  // Mobile: show overlay
-  if(isMobile()) {
-    overlay.classList.toggle('visible', sidebarOpen);
+  const btn     = document.getElementById('sidebarToggle');
+
+  if (isMobile()) {
+    // Mobile: управляем только через sb-open и overlay.visible
+    // НЕ трогаем .collapsed на мобиле
+    if (sidebarOpen) {
+      sb.classList.add('sb-open');
+      overlay.classList.add('visible');
+    } else {
+      sb.classList.remove('sb-open');
+      overlay.classList.remove('visible');
+    }
+  } else {
+    // Desktop: управляем через .collapsed
+    sb.classList.toggle('collapsed', !sidebarOpen);
   }
-  if(sidebarOpen) renderTabs();
+
+  btn.classList.toggle('active', sidebarOpen);
+  if (sidebarOpen) renderTabs();
 }
 
 function closeSidebarMobile() {
-  if(!isMobile()) return;
+  if (!sidebarOpen) return;
   sidebarOpen = false;
-  document.getElementById('sidebar').classList.add('collapsed');
-  document.getElementById('sidebarToggle').classList.remove('active');
+  document.getElementById('sidebar').classList.remove('sb-open');
   document.getElementById('sidebarOverlay').classList.remove('visible');
+  document.getElementById('sidebarToggle').classList.remove('active');
 }
 
-// Close sidebar on resize to desktop
 window.addEventListener('resize', () => {
-  if(!isMobile() && document.getElementById('sidebarOverlay').classList.contains('visible')) {
-    document.getElementById('sidebarOverlay').classList.remove('visible');
+  if (!isMobile()) {
+    // Перешли на десктоп — убираем mobile-классы
+    const sb = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    sb.classList.remove('sb-open');
+    overlay.classList.remove('visible');
+    // Применяем desktop-состояние
+    sb.classList.toggle('collapsed', !sidebarOpen);
   }
 });
 
+// ═══════════════════════════════════════════════════════
+//  TABS
+// ═══════════════════════════════════════════════════════
 function renderTabs() {
   const list = document.getElementById('tabList');
   list.innerHTML = '';
   chats.forEach(chat => {
     const div = document.createElement('div');
-    div.className = 'tab-item' + (chat.id===activeChatId?' active':'');
+    div.className = 'tab-item' + (chat.id === activeChatId ? ' active' : '');
     div.innerHTML =
-      '<span class="tab-icon">💬</span>'+
-      '<span class="tab-label">'+esc(chat.title)+'</span>'+
-      (chats.length>1 ? '<button class="tab-del" onclick="deleteChat(\''+chat.id+'\',event)" title="Удалить">✕</button>' : '');
+      '<span class="tab-icon">💬</span>' +
+      '<span class="tab-label">' + esc(chat.title) + '</span>' +
+      (chats.length > 1 ? '<button class="tab-del" onclick="deleteChat(\'' + chat.id + '\',event)" title="Удалить">✕</button>' : '');
     div.onclick = (e) => {
-      if(!e.target.classList.contains('tab-del')) {
+      if (!e.target.classList.contains('tab-del')) {
         switchChat(chat.id);
-        if(isMobile()) closeSidebarMobile();
+        if (isMobile()) closeSidebarMobile();
       }
     };
     list.appendChild(div);
@@ -890,8 +963,8 @@ function newChat() {
   saveChats();
   switchChat(chat.id);
   renderTabs();
-  if(isMobile()) closeSidebarMobile();
-  toast('Новый чат создан','ok');
+  if (isMobile()) closeSidebarMobile();
+  toast('Новый чат создан', 'ok');
 }
 
 function switchChat(id) {
@@ -910,7 +983,7 @@ function deleteChat(id, e) {
   saveChats();
   renderTabs();
   rebuildChatBox();
-  toast('Чат удалён','info');
+  toast('Чат удалён', 'info');
 }
 
 function rebuildChatBox() {
@@ -922,25 +995,25 @@ function rebuildChatBox() {
   }
   box.innerHTML = '';
   msgs.forEach(m => {
-    if (m.role === 'user')      addMsg('user', esc(m.content), false);
-    else if (m.role === 'assistant') addMsg('bot', md(m.content), false);
+    if (m.role === 'user')           addMsg('user', esc(m.content), false);
+    else if (m.role === 'assistant') addMsg('bot',  md(m.content),  false);
   });
 }
 
 function welcomeHTML() {
-  return '<div class="welcome" id="ws">'+
-    '<div class="w-logo"><svg viewBox="0 0 72 72" fill="none">'+
-    '<defs><linearGradient id="wg2" x1="0" y1="0" x2="72" y2="72" gradientUnits="userSpaceOnUse">'+
-    '<stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#a78bfa"/></linearGradient></defs>'+
-    '<polygon points="36,4 68,20 68,52 36,68 4,52 4,20" fill="rgba(56,189,248,.06)" stroke="url(#wg2)" stroke-width="1.3"/>'+
-    '<circle cx="36" cy="36" r="9" fill="url(#wg2)" opacity=".85"/>'+
-    '<circle cx="36" cy="36" r="5" fill="rgba(255,255,255,.18)"/></svg></div>'+
-    '<h2>OmniumAI</h2><p>Начните диалог или выберите другой чат.</p>'+
-    '<div class="chips">'+
-    '<div class="chip" onclick="chip(this)">✦ Квантовые вычисления</div>'+
-    '<div class="chip" onclick="chip(this)">✦ Стихотворение про космос</div>'+
-    '<div class="chip" onclick="chip(this)">✦ Помоги с кодом Python</div>'+
-    '<div class="chip" onclick="chip(this)">✦ Философия сознания</div>'+
+  return '<div class="welcome" id="ws">' +
+    '<div class="w-logo"><svg viewBox="0 0 72 72" fill="none">' +
+    '<defs><linearGradient id="wg2" x1="0" y1="0" x2="72" y2="72" gradientUnits="userSpaceOnUse">' +
+    '<stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#a78bfa"/></linearGradient></defs>' +
+    '<polygon points="36,4 68,20 68,52 36,68 4,52 4,20" fill="rgba(56,189,248,.06)" stroke="url(#wg2)" stroke-width="1.3"/>' +
+    '<circle cx="36" cy="36" r="9" fill="url(#wg2)" opacity=".85"/>' +
+    '<circle cx="36" cy="36" r="5" fill="rgba(255,255,255,.18)"/></svg></div>' +
+    '<h2>OmniumAI</h2><p>Начните диалог или выберите другой чат.</p>' +
+    '<div class="chips">' +
+    '<div class="chip" onclick="chip(this)">✦ Квантовые вычисления</div>' +
+    '<div class="chip" onclick="chip(this)">✦ Стихотворение про космос</div>' +
+    '<div class="chip" onclick="chip(this)">✦ Помоги с кодом Python</div>' +
+    '<div class="chip" onclick="chip(this)">✦ Философия сознания</div>' +
     '</div></div>';
 }
 
@@ -957,7 +1030,7 @@ function autoTitle(chatId, text) {
 // ═══════════════════════════════════════════════════════
 function openSettings() {
   const s = loadSettings();
-  document.getElementById('sysPromptInput').value    = s.sysPrompt;
+  document.getElementById('sysPromptInput').value     = s.sysPrompt;
   document.getElementById('assistantNameInput').value = s.assistantName;
   const picker = document.getElementById('themePicker');
   picker.dataset.pending = s.theme;
@@ -968,23 +1041,23 @@ function closeSettings() {
   document.getElementById('settingsPanel').classList.remove('open');
 }
 function onOverlayClick(e) {
-  if(e.target===document.getElementById('settingsPanel')) closeSettings();
+  if (e.target === document.getElementById('settingsPanel')) closeSettings();
 }
 function saveSettings() {
   const picker = document.getElementById('themePicker');
   const theme  = picker.dataset.pending || loadSettings().theme;
   const s = {
-    sysPrompt:     document.getElementById('sysPromptInput').value.trim() || DEFAULT_SYS,
+    sysPrompt:     document.getElementById('sysPromptInput').value.trim()     || DEFAULT_SYS,
     assistantName: document.getElementById('assistantNameInput').value.trim() || DEFAULT_NAME,
     theme,
   };
   saveSettingsData(s);
   applyTheme(theme);
   closeSettings();
-  toast('Настройки сохранены ✓','ok');
+  toast('Настройки сохранены ✓', 'ok');
 }
 function resetSettings() {
-  document.getElementById('sysPromptInput').value    = DEFAULT_SYS;
+  document.getElementById('sysPromptInput').value     = DEFAULT_SYS;
   document.getElementById('assistantNameInput').value = DEFAULT_NAME;
   pickTheme('dark');
 }
@@ -993,32 +1066,31 @@ function resetSettings() {
 //  ОТПРАВКА СООБЩЕНИЯ
 // ═══════════════════════════════════════════════════════
 async function send() {
-  if(busy) return;
+  if (busy) return;
   const inp  = document.getElementById('msgInput');
-  const text = inp.value.trim(); if(!text) return;
-  inp.value=''; inp.style.height='auto';
-  // Blur on mobile to hide keyboard after send
-  if(isMobile()) inp.blur();
+  const text = inp.value.trim(); if (!text) return;
+  inp.value = ''; inp.style.height = 'auto';
+  if (isMobile()) inp.blur();
 
   const chat = getActive();
   addMsg('user', esc(text), false);
   updateTokens(text);
-  chat.messages.push({role:'user', content:text});
+  chat.messages.push({ role: 'user', content: text });
   autoTitle(chat.id, text);
-  if(chat.messages.length > 40) chat.messages = chat.messages.slice(-40);
+  if (chat.messages.length > 40) chat.messages = chat.messages.slice(-40);
   saveChats();
 
-  busy=true;
-  const btn=document.getElementById('sendBtn');
-  btn.disabled=true; btn.classList.add('pulsing');
+  busy = true;
+  const btn = document.getElementById('sendBtn');
+  btn.disabled = true; btn.classList.add('pulsing');
   addThinking();
 
   const sett = loadSettings();
 
   try {
     const res = await fetch('/api/chat', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         messages:   chat.messages,
         sys_prompt: sett.sysPrompt,
@@ -1026,52 +1098,52 @@ async function send() {
     });
     rmThinking();
 
-    if(!res.ok){
-      let msg='Ошибка сервера';
-      try{const e=await res.json();msg=e.error||msg;}catch(_){}
-      addMsg('bot','<strong>⚠️ '+esc(msg)+'</strong>',false);
-      toast(msg,'err'); return;
+    if (!res.ok) {
+      let msg = 'Ошибка сервера';
+      try { const e = await res.json(); msg = e.error || msg; } catch (_) {}
+      addMsg('bot', '<strong>⚠️ ' + esc(msg) + '</strong>', false);
+      toast(msg, 'err'); return;
     }
 
-    const reader=res.body.getReader(), dec=new TextDecoder();
-    let raw='', contentEl=null, sseBuf='';
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let raw = '', contentEl = null, sseBuf = '';
 
-    while(true){
-      const{done,value}=await reader.read(); if(done) break;
-      sseBuf+=dec.decode(value,{stream:true});
-      const lines=sseBuf.split('\n'); sseBuf=lines.pop();
-      for(const line of lines){
-        const l=line.trim(); if(!l.startsWith('data:')) continue;
-        const payload=l.slice(5).trim();
-        if(payload==='[DONE]'){sseBuf='';break;}
-        try{
-          const obj=JSON.parse(payload);
-          if(obj.error){toast(obj.error,'err');break;}
-          const delta=obj.delta||''; if(!delta) continue;
-          raw+=delta;
-          if(!contentEl){contentEl=addMsg('bot',md(raw),true);}
-          else{contentEl.innerHTML=md(raw);}
-          document.getElementById('chatBox').scrollTop=99999;
-        }catch(_){}
+    while (true) {
+      const { done, value } = await reader.read(); if (done) break;
+      sseBuf += dec.decode(value, { stream: true });
+      const lines = sseBuf.split('\n'); sseBuf = lines.pop();
+      for (const line of lines) {
+        const l = line.trim(); if (!l.startsWith('data:')) continue;
+        const payload = l.slice(5).trim();
+        if (payload === '[DONE]') { sseBuf = ''; break; }
+        try {
+          const obj   = JSON.parse(payload);
+          if (obj.error) { toast(obj.error, 'err'); break; }
+          const delta = obj.delta || ''; if (!delta) continue;
+          raw += delta;
+          if (!contentEl) { contentEl = addMsg('bot', md(raw), true); }
+          else { contentEl.innerHTML = md(raw); }
+          document.getElementById('chatBox').scrollTop = 99999;
+        } catch (_) {}
       }
     }
 
-    if(contentEl){contentEl.classList.remove('typing');contentEl.innerHTML=md(raw);}
-    else if(raw){addMsg('bot',md(raw),false);}
+    if (contentEl) { contentEl.classList.remove('typing'); contentEl.innerHTML = md(raw); }
+    else if (raw)  { addMsg('bot', md(raw), false); }
 
-    if(raw){
-      chat.messages.push({role:'assistant',content:raw});
+    if (raw) {
+      chat.messages.push({ role: 'assistant', content: raw });
       saveChats();
       updateTokens(raw);
     }
 
-  }catch(err){
+  } catch (err) {
     rmThinking();
-    addMsg('bot','<strong>⚠️ Ошибка соединения.</strong>',false);
-    toast('Ошибка соединения','err');
+    addMsg('bot', '<strong>⚠️ Ошибка соединения.</strong>', false);
+    toast('Ошибка соединения', 'err');
     console.error(err);
-  }finally{
-    busy=false; btn.disabled=false; btn.classList.remove('pulsing');
+  } finally {
+    busy = false; btn.disabled = false; btn.classList.remove('pulsing');
   }
 }
 
@@ -1083,32 +1155,32 @@ function clearChat() {
   chat.messages = [];
   chat.title = 'Новый чат';
   saveChats();
-  totalTokens=0;
-  document.getElementById('tokenCount').textContent='0 токенов';
+  totalTokens = 0;
+  document.getElementById('tokenCount').textContent = '0 токенов';
   document.getElementById('chatBox').innerHTML = welcomeHTML();
   renderTabs();
-  toast('Чат очищен','ok');
+  toast('Чат очищен', 'ok');
 }
 
 function exportChat() {
   const chat = getActive();
-  if(!chat.messages.length){ toast('Нет сообщений для экспорта','err'); return; }
+  if (!chat.messages.length) { toast('Нет сообщений для экспорта', 'err'); return; }
   const sett = loadSettings();
   const name = sett.assistantName || DEFAULT_NAME;
   let out = `# ${chat.title}\n`;
   out += `> Экспортировано из OmniumAI · OmniNet 1.0 · ${new Date().toLocaleString('ru')}\n\n---\n\n`;
-  chat.messages.forEach(m=>{
-    const role = m.role==='user' ? '👤 **Вы**' : `✦ **${name}**`;
+  chat.messages.forEach(m => {
+    const role = m.role === 'user' ? '👤 **Вы**' : `✦ **${name}**`;
     out += `### ${role}\n\n${m.content}\n\n---\n\n`;
   });
-  const blob = new Blob([out], {type:'text/markdown;charset=utf-8'});
+  const blob = new Blob([out], { type: 'text/markdown;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href = url;
-  a.download = `omniumai-${chat.title.replace(/[^а-яa-z0-9]/gi,'_').slice(0,30)}-${Date.now()}.md`;
+  a.download = `omniumai-${chat.title.replace(/[^а-яa-z0-9]/gi, '_').slice(0, 30)}-${Date.now()}.md`;
   a.click();
   URL.revokeObjectURL(url);
-  toast('Чат экспортирован ✓','ok');
+  toast('Чат экспортирован ✓', 'ok');
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1118,12 +1190,6 @@ function exportChat() {
   applyTheme(loadSettings().theme);
   rebuildChatBox();
   renderTabs();
-  // Prevent double-tap zoom on iOS
-  document.addEventListener('touchend', (e) => {
-    if(e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') {
-      // Allow text selection
-    }
-  }, {passive:true});
 })();
 </script>
 </body>
