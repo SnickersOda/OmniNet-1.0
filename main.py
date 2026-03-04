@@ -125,10 +125,7 @@ header{height:var(--header-h);display:flex;align-items:center;justify-content:sp
 header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,var(--accent),var(--violet),transparent);opacity:.3}
 
-/* Desktop header: keep backdrop-filter */
-@media(min-width:769px){
-  header{backdrop-filter:blur(24px)}
-}
+/* backdrop-filter removed - breaks fixed sidebar on iOS */
 
 .logo{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .logo-gem{width:28px;height:28px;flex-shrink:0}
@@ -285,7 +282,7 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .w-logo svg{width:100%;height:100%}
 .w-logo::after{content:'';position:absolute;inset:-10px;border-radius:50%;
   background:conic-gradient(from 0deg,var(--accent),var(--violet),var(--accent));
-  filter:blur(14px);opacity:.2;animation:spin 8s linear infinite;z-index:-1}
+  opacity:.15;animation:spin 8s linear infinite;z-index:-1}
 @keyframes spin{to{transform:rotate(360deg)}}
 .welcome h2{font-family:'Syne',sans-serif;font-weight:800;font-size:1.35rem;
   background:linear-gradient(110deg,#fff 20%,var(--accent) 55%,var(--violet) 100%);
@@ -387,10 +384,7 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .input-area{padding:10px 16px;padding-bottom:calc(12px + var(--input-safe));
   position:relative;background:rgba(4,5,13,.85);
   border-top:1px solid var(--border);flex-shrink:0}
-/* Desktop: keep backdrop-filter */
-@media(min-width:769px){
-  .input-area{backdrop-filter:blur(24px)}
-}
+/* backdrop-filter removed - breaks fixed sidebar on iOS */
 .input-area::before{content:'';position:absolute;top:-1px;left:10%;right:10%;height:1px;
   background:linear-gradient(90deg,transparent,rgba(56,189,248,.18),rgba(167,139,250,.18),transparent)}
 @media(max-width:600px){.input-area{padding:8px 12px;padding-bottom:calc(10px + var(--input-safe))}}
@@ -429,10 +423,7 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 #settingsPanel{position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;
   background:rgba(4,5,13,.75);
   opacity:0;pointer-events:none;transition:opacity .25s;padding:16px}
-/* Desktop: keep backdrop-filter on settings */
-@media(min-width:769px){
-  #settingsPanel{backdrop-filter:blur(12px)}
-}
+/* backdrop-filter removed - breaks fixed sidebar on iOS */
 #settingsPanel.open{opacity:1;pointer-events:all}
 .settings-box{width:540px;max-width:100%;max-height:90vh;overflow-y:auto;
   background:var(--s2);border:1px solid var(--border2);border-radius:18px;
@@ -698,7 +689,7 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 // ═══════════════════════════════════════════════════════
 //  КОНСТАНТЫ
 // ═══════════════════════════════════════════════════════
-const DEFAULT_SYS  = `""" + DEFAULT_USER_SYSTEM.replace('`','\\`') + r"""`;
+const DEFAULT_SYS  = `Ты полезный, дружелюбный и умный ассистент. Отвечай развёрнуто и по делу.`;
 const DEFAULT_NAME = 'OmniumAI';
 
 // ═══════════════════════════════════════════════════════
@@ -1251,8 +1242,6 @@ def chat():
 def clear():
     return jsonify({"ok": True})
 
-import os
-
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=False)
