@@ -11,7 +11,7 @@ from flask import Flask, request, jsonify, Response, stream_with_context
 import urllib.request
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-OPENROUTER_MODEL   = "meta-llama/llama-3.2-11b-vision-instruct:free"
+OPENROUTER_MODEL   = "openrouter/free"
 DISPLAY_MODEL = "OmniNet 1.0"
 DISPLAY_NAME  = "OmniumAI"
 HOST, PORT    = "127.0.0.1", 5000
