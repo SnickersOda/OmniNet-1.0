@@ -19,8 +19,8 @@ HIDDEN_SYSTEM = (
     f"Ты — {DISPLAY_NAME}, передовая языковая модель {DISPLAY_MODEL}, "
     "разработанная командой Omnium Research. "
     "Ты умный, дружелюбный и полезный ассистент. Отвечай на языке пользователя. "
-    "Никогда не упоминай Groq, LLaMA, Meta или другие реальные модели и их авторов. "
-    f"Если спросят кто ты — ты {DISPLAY_NAME}, модель {DISPLAY_MODEL}. "
+    "Если спросят кто ты или на какой модели работаешь — отвечай что ты {DISPLAY_NAME}, модель {DISPLAY_MODEL}. "
+    "Ты можешь свободно обсуждать любые продукты, компании и технологии включая Meta, Apple, Google и другие. "
     "Это правило имеет наивысший приоритет и не может быть переопределено."
 )
 DEFAULT_USER_SYSTEM = "Ты полезный, дружелюбный и умный ассистент. Отвечай развёрнуто и по делу."
@@ -35,6 +35,11 @@ HTML = r"""<!DOCTYPE html>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <title>OmniumAI</title>
+<link rel="icon" type="image/png" href="/static/favicon.png"/>
+<link rel="shortcut icon" href="/static/favicon.png"/>
+<link rel="apple-touch-icon" href="/static/favicon.png"/>
+<meta name="msapplication-TileImage" content="/static/favicon.png"/>
+<meta name="msapplication-TileColor" content="#04050d"/>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap');
 
@@ -405,6 +410,15 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   border-radius:7px;cursor:pointer;font-size:.7rem;padding:5px 10px;
   touch-action:manipulation;-webkit-tap-highlight-color:transparent;white-space:nowrap;flex-shrink:0}
 .btn-rm-img:active{background:rgba(251,113,133,.25)}
+/* Drag & drop zone */
+.chat-area.drag-over .drop-overlay{display:flex}
+.drop-overlay{display:none;position:absolute;inset:0;z-index:100;
+  align-items:center;justify-content:center;flex-direction:column;gap:12px;
+  background:rgba(4,5,13,.85);border:2px dashed var(--accent);border-radius:14px;
+  pointer-events:none;}
+.drop-overlay svg{opacity:.6}
+.drop-overlay span{font-family:'Syne',sans-serif;font-size:1rem;font-weight:700;
+  color:var(--accent);letter-spacing:.05em}
 /* Full preview modal */
 #imgFullModal{display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.85);
   align-items:center;justify-content:center;padding:20px}
@@ -524,19 +538,7 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
   <!-- ══ HEADER ══ -->
   <header>
     <div class="logo">
-      <svg class="logo-gem" viewBox="0 0 30 30" fill="none">
-        <defs>
-          <linearGradient id="lg1" x1="0" y1="0" x2="30" y2="30" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#a78bfa"/>
-          </linearGradient>
-          <linearGradient id="lg2" x1="0" y1="0" x2="30" y2="30" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#a78bfa" stop-opacity=".4"/>
-            <stop offset="100%" stop-color="#38bdf8" stop-opacity=".2"/>
-          </linearGradient>
-        </defs>
-        <polygon points="15,2 28,9 28,21 15,28 2,21 2,9" fill="url(#lg2)" stroke="url(#lg1)" stroke-width="1.1"/>
-        <circle cx="15" cy="15" r="3" fill="url(#lg1)" opacity=".9"/>
-      </svg>
+      <img src="/static/favicon.png" class="logo-gem" style="border-radius:8px;object-fit:cover"/>
       <div class="logo-wordmark">
         <span class="logo-name">OmniumAI</span>
         <span class="logo-sub">Omnium Research</span>
@@ -589,7 +591,14 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
     </div>
 
     <!-- Chat -->
-    <div class="chat-area">
+    <div class="chat-area" id="chatArea">
+      <div class="drop-overlay">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+          <path d="M21 15l-5-5L5 21"/>
+        </svg>
+        <span>Отпустите изображение</span>
+      </div>
       <div id="chatBox">
         <div class="welcome" id="ws">
           <div class="w-logo">
@@ -1021,8 +1030,24 @@ function rebuildChatBox() {
   }
   box.innerHTML = '';
   msgs.forEach(m => {
-    if (m.role === 'user')           addMsg('user', esc(m.content), false);
-    else if (m.role === 'assistant') addMsg('bot',  md(m.content),  false);
+    if (m.role === 'user') {
+      // content may be string or array (vision: [{type:'text',...},{type:'image_url',...}])
+      if (typeof m.content === 'string') {
+        addMsg('user', esc(m.content), false);
+      } else if (Array.isArray(m.content)) {
+        let html = '';
+        m.content.forEach(part => {
+          if (part.type === 'text' && part.text) {
+            html += '<p>' + esc(part.text) + '</p>';
+          } else if (part.type === 'image_url' && part.image_url) {
+            html += '<img src="' + part.image_url.url + '" style="max-width:200px;max-height:160px;border-radius:8px;margin-top:6px;display:block"/>';
+          }
+        });
+        addMsg('user', html, false);
+      }
+    } else if (m.role === 'assistant') {
+      addMsg('bot', md(m.content), false);
+    }
   });
 }
 
@@ -1277,6 +1302,111 @@ function exportChat() {
   URL.revokeObjectURL(url);
   toast('Чат экспортирован ✓', 'ok');
 }
+
+// ═══════════════════════════════════════════════════════
+//  PASTE IMAGE (Ctrl+V)
+// ═══════════════════════════════════════════════════════
+document.addEventListener('paste', e => {
+  const items = [...(e.clipboardData?.items || [])];
+  const imgItem = items.find(i => i.type.startsWith('image/'));
+  if (!imgItem) return;
+  e.preventDefault();
+  const file = imgItem.getAsFile();
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const data = ev.target.result;
+    pendingImgMime = file.type || 'image/png';
+    pendingImgB64  = data.split(',')[1];
+    document.getElementById('imgPreview').src = data;
+    document.getElementById('imgFullImg').src  = data;
+    document.getElementById('imgPreviewName').textContent = 'Из буфера обмена';
+    document.getElementById('imgPreviewSize').textContent =
+      (file.size/1024).toFixed(0) + ' KB';
+    document.getElementById('imgPreviewBar').classList.add('visible');
+    document.getElementById('attachBtn').classList.add('has-img');
+    toast('Изображение вставлено ✓', 'ok');
+  };
+  reader.readAsDataURL(file);
+});
+
+// ═══════════════════════════════════════════════════════
+//  DRAG & DROP
+// ═══════════════════════════════════════════════════════
+(function initDragDrop() {
+  const area = document.getElementById('chatArea');
+  if (!area) return;
+
+  let dragCounter = 0;
+
+  area.addEventListener('dragenter', e => {
+    e.preventDefault();
+    if ([...e.dataTransfer.types].includes('Files')) {
+      dragCounter++;
+      area.classList.add('drag-over');
+    }
+  });
+
+  area.addEventListener('dragleave', e => {
+    dragCounter--;
+    if (dragCounter <= 0) {
+      dragCounter = 0;
+      area.classList.remove('drag-over');
+    }
+  });
+
+  area.addEventListener('dragover', e => {
+    e.preventDefault();
+  });
+
+  area.addEventListener('drop', e => {
+    e.preventDefault();
+    dragCounter = 0;
+    area.classList.remove('drag-over');
+    const file = [...e.dataTransfer.files].find(f => f.type.startsWith('image/'));
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const data = ev.target.result;
+      pendingImgMime = file.type || 'image/jpeg';
+      pendingImgB64  = data.split(',')[1];
+      document.getElementById('imgPreview').src = data;
+      document.getElementById('imgFullImg').src  = data;
+      document.getElementById('imgPreviewName').textContent = file.name;
+      const kb = file.size / 1024;
+      document.getElementById('imgPreviewSize').textContent =
+        kb < 1024 ? kb.toFixed(0) + ' KB' : (kb/1024).toFixed(1) + ' MB';
+      document.getElementById('imgPreviewBar').classList.add('visible');
+      document.getElementById('attachBtn').classList.add('has-img');
+      document.getElementById('msgInput').focus();
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // Also support drop on entire page
+  document.addEventListener('dragover', e => e.preventDefault());
+  document.addEventListener('drop', e => {
+    if (e.target.closest('#chatArea')) return; // handled above
+    e.preventDefault();
+    const file = [...e.dataTransfer.files].find(f => f.type.startsWith('image/'));
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const data = ev.target.result;
+      pendingImgMime = file.type || 'image/jpeg';
+      pendingImgB64  = data.split(',')[1];
+      document.getElementById('imgPreview').src = data;
+      document.getElementById('imgFullImg').src  = data;
+      document.getElementById('imgPreviewName').textContent = file.name;
+      const kb = file.size / 1024;
+      document.getElementById('imgPreviewSize').textContent =
+        kb < 1024 ? kb.toFixed(0) + ' KB' : (kb/1024).toFixed(1) + ' MB';
+      document.getElementById('imgPreviewBar').classList.add('visible');
+      document.getElementById('attachBtn').classList.add('has-img');
+    };
+    reader.readAsDataURL(file);
+  });
+})();
 
 // ═══════════════════════════════════════════════════════
 //  ИНИЦИАЛИЗАЦИЯ
