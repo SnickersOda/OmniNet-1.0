@@ -826,11 +826,56 @@ async function loadChatsCloud() {
   if (error || !data || !data.length) return null;
   return data.map(r => ({ id: r.chat_id, title: r.title, messages: r.messages }));
 }
+// Загрузить base64-картинку в Supabase Storage, вернуть публичный URL
+async function uploadImageToStorage(base64, mime) {
+  if (!currentUser) return null;
+  try {
+    const ext  = mime.split('/')[1] || 'jpg';
+    const path = `${currentUser.id}/${Date.now()}.${ext}`;
+    const blob = await fetch(`data:${mime};base64,${base64}`).then(r => r.blob());
+    const { error } = await sb.storage.from('chat-images').upload(path, blob, { contentType: mime, upsert: false });
+    if (error) { console.error('Storage upload error:', error); return null; }
+    const { data } = sb.storage.from('chat-images').getPublicUrl(path);
+    return data.publicUrl;
+  } catch(e) { console.error('uploadImageToStorage:', e); return null; }
+}
+
+// Заменить base64 image_url на Storage URL во всех сообщениях чата
+async function resolveImagesForCloud(messages) {
+  const result = [];
+  for (const m of messages) {
+    if (!Array.isArray(m.content)) { result.push(m); continue; }
+    const newContent = [];
+    for (const part of m.content) {
+      if (part.type === 'image_url' && part.image_url?.url?.startsWith('data:')) {
+        // Ещё не загружено — загружаем
+        const dataUrl = part.image_url.url;
+        const mime    = dataUrl.split(';')[0].split(':')[1];
+        const base64  = dataUrl.split(',')[1];
+        const url     = await uploadImageToStorage(base64, mime);
+        if (url) newContent.push({ type: 'image_url', image_url: { url } });
+        else     newContent.push({ type: 'text', text: '[📷 Не удалось загрузить изображение]' });
+      } else {
+        newContent.push(part);
+      }
+    }
+    if (newContent.length === 1 && newContent[0].type === 'text') {
+      result.push({ ...m, content: newContent[0].text });
+    } else {
+      result.push({ ...m, content: newContent });
+    }
+  }
+  return result;
+}
+
 async function upsertChatCloud(chat) {
   if (!currentUser) return;
   setSyncing(true);
+  const cloudMessages = await resolveImagesForCloud(chat.messages);
+  // Обновляем локальные сообщения тоже (base64 → Storage URL)
+  chat.messages = cloudMessages;
   await sb.from('chats').upsert(
-    { user_id: currentUser.id, chat_id: chat.id, title: chat.title, messages: chat.messages, updated_at: new Date().toISOString() },
+    { user_id: currentUser.id, chat_id: chat.id, title: chat.title, messages: cloudMessages, updated_at: new Date().toISOString() },
     { onConflict: 'user_id,chat_id' }
   );
   setSyncing(false);
@@ -876,6 +921,9 @@ function openAuthModal() {
   document.getElementById('authErr').classList.remove('show');
   document.getElementById('authEmail').value = '';
   document.getElementById('authPassword').value = '';
+  const btn = document.getElementById('authSubmitBtn');
+  btn.disabled = false;
+  btn.textContent = 'Войти';
   switchAuthTab('login');
   setTimeout(() => document.getElementById('authEmail').focus(), 250);
 }
@@ -913,19 +961,22 @@ async function submitAuth() {
       : await sb.auth.signUp({ email, password });
     if (result.error) {
       showAuthErr(xlateErr(result.error.message));
-      btn.disabled = false;
-      btn.textContent = authMode === 'login' ? 'Войти' : 'Создать аккаунт';
       return;
     }
     if (authMode === 'register' && !result.data?.session) {
-      showAuthErr('✉️ Проверьте почту — мы отправили письмо для подтверждения');
-      btn.disabled = false;
-      btn.textContent = 'Создать аккаунт';
+      // Supabase не возвращает ошибку на дубль email — проверяем identities
+      const identities = result.data?.user?.identities;
+      if (identities && identities.length === 0) {
+        showAuthErr('Этот email уже зарегистрирован. Попробуйте войти.');
+      } else {
+        showAuthErr('✉️ Проверьте почту — мы отправили письмо для подтверждения');
+      }
       return;
     }
     closeAuthModal();
   } catch(e) {
     showAuthErr('Ошибка соединения');
+  } finally {
     btn.disabled = false;
     btn.textContent = authMode === 'login' ? 'Войти' : 'Создать аккаунт';
   }
