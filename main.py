@@ -8,13 +8,10 @@ OmniumAI — powered by OmniNet 1.0
 import os, json, time, threading
 from flask import Flask, request, jsonify, Response, stream_with_context
 
-try:
-    from groq import Groq
-except ImportError:
-    print("\n[ОШИБКА] Выполните: pip install groq flask\n"); exit(1)
+import urllib.request
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-GROQ_MODEL    = "llama-3.3-70b-versatile"
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "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")
+OPENROUTER_MODEL   = "meta-llama/llama-4-maverick:free"
 DISPLAY_MODEL = "OmniNet 1.0"
 DISPLAY_NAME  = "OmniumAI"
 HOST, PORT    = "127.0.0.1", 5000
@@ -39,7 +36,6 @@ HTML = r"""<!DOCTYPE html>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <title>OmniumAI</title>
-<link rel="icon" type="image/png" href="/static/favicon.png">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap');
 
@@ -391,6 +387,32 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
 .btn-send:hover{transform:scale(1.08);box-shadow:0 5px 22px rgba(56,189,248,.5)}
 .btn-send:active{transform:scale(.94)}
 .btn-send:disabled{opacity:.3;cursor:not-allowed;transform:none;box-shadow:none}
+.btn-attach{width:34px;height:34px;border-radius:9px;border:1px solid var(--border2);
+  background:rgba(255,255,255,.04);color:var(--muted2);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .2s;margin-right:4px;
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;flex-shrink:0}
+.btn-attach:hover,.btn-attach.has-img{border-color:rgba(56,189,248,.4);color:var(--accent);background:rgba(56,189,248,.08)}
+#imgPreviewBar{max-width:800px;margin:0 auto 8px;display:none;flex-direction:column;gap:0;padding:0 2px}
+#imgPreviewBar.visible{display:flex}
+.img-preview-inner{display:flex;align-items:center;gap:10px;padding:8px 10px;
+  background:rgba(56,189,248,.05);border:1px solid rgba(56,189,248,.15);border-radius:11px;}
+#imgPreview{width:56px;height:56px;border-radius:8px;object-fit:cover;
+  border:1px solid rgba(56,189,248,.2);flex-shrink:0;cursor:pointer}
+#imgPreview:active{opacity:.8}
+.img-preview-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+#imgPreviewName{font-size:.75rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#imgPreviewSize{font-size:.65rem;color:var(--muted2)}
+.btn-rm-img{background:rgba(251,113,133,.12);border:1px solid rgba(251,113,133,.25);color:var(--rose);
+  border-radius:7px;cursor:pointer;font-size:.7rem;padding:5px 10px;
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;white-space:nowrap;flex-shrink:0}
+.btn-rm-img:active{background:rgba(251,113,133,.25)}
+/* Full preview modal */
+#imgFullModal{display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.85);
+  align-items:center;justify-content:center;padding:20px}
+#imgFullModal.open{display:flex}
+#imgFullModal img{max-width:100%;max-height:90vh;border-radius:12px;object-fit:contain}
+#imgFullModal::after{content:'✕';position:absolute;top:16px;right:20px;color:#fff;
+  font-size:1.4rem;cursor:pointer;opacity:.7}
 .btn-send.pulsing{animation:spulse 1s ease-in-out infinite}
 @keyframes spulse{0%,100%{box-shadow:0 3px 14px rgba(56,189,248,.3)}
   50%{box-shadow:0 3px 22px rgba(56,189,248,.65),0 0 0 5px rgba(56,189,248,.1)}}
@@ -597,11 +619,30 @@ header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px
       </div>
 
       <div class="input-area">
+        <div id="imgPreviewBar">
+          <div class="img-preview-inner">
+            <img id="imgPreview" src="" alt="" onclick="openImgFull()" title="Нажмите для увеличения"/>
+            <div class="img-preview-info">
+              <span id="imgPreviewName">Изображение</span>
+              <span id="imgPreviewSize"></span>
+            </div>
+            <button class="btn-rm-img" onclick="removeImg()">✕ убрать</button>
+          </div>
+        </div>
+        <div id="imgFullModal" onclick="closeImgFull()">
+          <img id="imgFullImg" src="" alt=""/>
+        </div>
         <div class="iw">
           <textarea id="msgInput" rows="1"
             placeholder="Спросите OmniumAI что угодно…"
             oninput="ar(this)" onkeydown="hk(event)"></textarea>
           <div class="ia">
+            <input type="file" id="imgInput" accept="image/*" style="display:none" onchange="onImgSelect(event)"/>
+            <button class="btn-attach" id="attachBtn" onclick="document.getElementById('imgInput').click()" title="Прикрепить изображение">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+              </svg>
+            </button>
             <button class="btn-send" id="sendBtn" onclick="send()">
               <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M1.5 1.5L14.5 8L1.5 14.5V9.5L10.5 8L1.5 6.5V1.5Z"/>
@@ -849,6 +890,21 @@ function addThinking() {
 }
 function rmThinking() { const e = document.getElementById('thinking'); if (e) e.remove(); }
 
+function addThinkingImg() {
+  rmWelcome();
+  const box  = document.getElementById('chatBox');
+  const wrap = document.createElement('div');
+  wrap.id = 'thinking'; wrap.className = 'mw bot';
+  wrap.innerHTML = '<div class="av av-bot">'+botAv+'</div>' +
+    '<div class="bubble bubble-bot"><div class="bname">' +
+    esc(loadSettings().assistantName||DEFAULT_NAME) + '</div>' +
+    '<div style="display:flex;align-items:center;gap:8px;font-size:.82rem;color:var(--muted2)">' +
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;animation:spin 2s linear infinite">' +
+    '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' +
+    'Анализирую изображение…</div></div>';
+  box.appendChild(wrap); box.scrollTop = box.scrollHeight;
+}
+
 function copyBub(btn) {
   const text = btn.closest('.bubble').querySelector('.bc').innerText;
   navigator.clipboard.writeText(text).then(() => {
@@ -1036,25 +1092,94 @@ function resetSettings() {
 // ═══════════════════════════════════════════════════════
 //  ОТПРАВКА СООБЩЕНИЯ
 // ═══════════════════════════════════════════════════════
+// ── image state ──────────────────────────────────────────────────────────
+let pendingImgB64  = null;
+let pendingImgMime = null;
+
+function onImgSelect(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const data = ev.target.result;
+    pendingImgMime = file.type || 'image/jpeg';
+    pendingImgB64  = data.split(',')[1];
+    document.getElementById('imgPreview').src = data;
+    document.getElementById('imgFullImg').src  = data;
+    document.getElementById('imgPreviewName').textContent = file.name;
+    const kb = (file.size / 1024);
+    document.getElementById('imgPreviewSize').textContent =
+      kb < 1024 ? kb.toFixed(0) + ' KB' : (kb/1024).toFixed(1) + ' MB';
+    document.getElementById('imgPreviewBar').classList.add('visible');
+    document.getElementById('attachBtn').classList.add('has-img');
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+function openImgFull()  { document.getElementById('imgFullModal').classList.add('open'); }
+function closeImgFull() { document.getElementById('imgFullModal').classList.remove('open'); }
+
+function removeImg() {
+  pendingImgB64 = null; pendingImgMime = null;
+  document.getElementById('imgPreviewBar').classList.remove('visible');
+  document.getElementById('attachBtn').classList.remove('has-img');
+  document.getElementById('imgPreview').src = '';
+}
+
+// ── send ─────────────────────────────────────────────────────────────────
 async function send() {
   if (busy) return;
   const inp  = document.getElementById('msgInput');
-  const text = inp.value.trim(); if (!text) return;
+  const text = inp.value.trim();
+  const hasImg = !!pendingImgB64;
+  if (!text && !hasImg) return;
   inp.value = ''; inp.style.height = 'auto';
   if (isMobile()) inp.blur();
 
   const chat = getActive();
-  addMsg('user', esc(text), false);
+
+  // Build display HTML for user bubble
+  let userHtml = text ? esc(text) : '';
+  if (hasImg) {
+    const imgSrc = 'data:' + pendingImgMime + ';base64,' + pendingImgB64;
+    userHtml += (userHtml ? '<br>' : '') +
+      '<img src="'+imgSrc+'" style="max-width:200px;max-height:160px;border-radius:8px;margin-top:6px;display:block"/>';
+  }
+  addMsg('user', userHtml, false);
   updateTokens(text);
-  chat.messages.push({ role: 'user', content: text });
-  autoTitle(chat.id, text);
+
+  // Build API message content
+  let userContent;
+  if (hasImg) {
+    userContent = [
+      { type: 'image_url', image_url: { url: 'data:' + pendingImgMime + ';base64,' + pendingImgB64 } }
+    ];
+    if (text) userContent.unshift({ type: 'text', text: text });
+    else      userContent.unshift({ type: 'text', text: 'Проанализируй это изображение.' });
+  } else {
+    userContent = text;
+  }
+
+  chat.messages.push({ role: 'user', content: userContent });
+  autoTitle(chat.id, text || '📷 Изображение');
   if (chat.messages.length > 40) chat.messages = chat.messages.slice(-40);
   saveChats();
+
+  // Clear image
+  const wasImg = hasImg;
+  removeImg();
 
   busy = true;
   const btn = document.getElementById('sendBtn');
   btn.disabled = true; btn.classList.add('pulsing');
-  addThinking();
+
+  // Thinking bubble — special text if image sent
+  if (wasImg) {
+    addThinkingImg();
+  } else {
+    addThinking();
+  }
 
   const sett = loadSettings();
 
@@ -1193,20 +1318,41 @@ def chat():
 
     def generate():
         try:
-            client = Groq(api_key=GROQ_API_KEY)
-            stream = client.chat.completions.create(
-                model=GROQ_MODEL,
-                messages=full,
-                max_tokens=1024,
-                temperature=0.75,
-                stream=True
+            payload = json.dumps({
+                "model": OPENROUTER_MODEL,
+                "messages": full,
+                "max_tokens": 2048,
+                "temperature": 0.75,
+                "stream": True
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                "https://openrouter.ai/api/v1/chat/completions",
+                data=payload,
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://omniumai.onrender.com",
+                    "X-Title": "OmniumAI"
+                },
+                method="POST"
             )
-            for chunk in stream:
-                delta = ""
-                if chunk.choices and chunk.choices[0].delta:
-                    delta = chunk.choices[0].delta.content or ""
-                if delta:
-                    yield "data: " + json.dumps({"delta": delta}, ensure_ascii=False) + "\n\n"
+            with urllib.request.urlopen(req) as resp:
+                for raw_line in resp:
+                    line = raw_line.decode("utf-8").strip()
+                    if not line.startswith("data:"):
+                        continue
+                    payload_str = line[5:].strip()
+                    if payload_str == "[DONE]":
+                        break
+                    try:
+                        obj = json.loads(payload_str)
+                        delta = ""
+                        if obj.get("choices"):
+                            delta = obj["choices"][0].get("delta", {}).get("content") or ""
+                        if delta:
+                            yield "data: " + json.dumps({"delta": delta}, ensure_ascii=False) + "\n\n"
+                    except Exception:
+                        pass
             yield "data: [DONE]\n\n"
         except Exception as e:
             yield "data: " + json.dumps({"error": str(e)[:200]}, ensure_ascii=False) + "\n\n"
