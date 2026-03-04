@@ -10,7 +10,7 @@ from flask import Flask, request, jsonify, Response, stream_with_context
 
 import urllib.request
 
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "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")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_MODEL   = "meta-llama/llama-4-maverick:free"
 DISPLAY_MODEL = "OmniNet 1.0"
 DISPLAY_NAME  = "OmniumAI"
