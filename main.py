@@ -15,7 +15,8 @@ OPENROUTER_MODELS  = [
     "google/gemma-3-27b-it:free",
     "meta-llama/llama-3.3-70b-instruct:free",
     "mistralai/mistral-small-3.1-24b-instruct:free",
-    "qwen/qwen2.5-vl-72b-instruct:free",
+    "deepseek/deepseek-chat-v3-0324:free",
+    "microsoft/phi-4-reasoning:free",
 ]
 DISPLAY_MODEL = "OmniNet 1.0"
 DISPLAY_NAME  = "OmniumAI"
