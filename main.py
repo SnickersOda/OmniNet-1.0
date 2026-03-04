@@ -5,7 +5,7 @@ OmniumAI — powered by OmniNet 1.0
 Запуск: pip install flask groq  →  python omniumai.py
 """
 
-import os, json, time, threading, webbrowser
+import os, json, time, threading
 from flask import Flask, request, jsonify, Response, stream_with_context
 
 try:
@@ -1186,9 +1186,5 @@ def clear():
     return jsonify({"ok": True})
 
 # ── Запуск ───────────────────────────────────────────────────────────────────
-def _open():
-    time.sleep(1.3)
-    webbrowser.open(f"http://{HOST}:{PORT}")
-
 if __name__ == "__main__":
     app.run(debug=False)
