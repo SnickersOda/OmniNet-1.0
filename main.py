@@ -199,32 +199,39 @@ body.is-mobile .hdr-btn{padding:6px 8px}
 }
 #sidebar.collapsed{width:0;opacity:0;pointer-events:none}
 
-/* Mobile drawer */
+/* =========================
+   Mobile drawer FIX
+   Без transform
+========================= */
+
 body.is-mobile #sidebar{
-  position:fixed;top:0;left:0;bottom:0;
+  position:fixed;
+  top:0;
+  left:-280px;     /* скрыт */
+  bottom:0;
   width:280px;
-  opacity:1 !important;
-  /* GPU-only transform, zero other effects */
-  transform:translateX(-100%);
-  transition:transform .26s cubic-bezier(.25,1,.5,1);
-  padding-top:env(safe-area-inset-top,0px);
+
   background:#07091b;
-  /* CRITICAL: no filter, no backdrop-filter, no box-shadow with blur */
+  padding-top:env(safe-area-inset-top,0px);
+
+  transition:left .26s cubic-bezier(.25,1,.5,1);
+
+  z-index:400;
+
+  /* убираем любые GPU эффекты */
+  transform:none !important;
+  will-change:auto !important;
   backdrop-filter:none !important;
   -webkit-backdrop-filter:none !important;
   filter:none !important;
   box-shadow:none;
-  will-change:transform;
-  z-index:400;
 }
-body.is-mobile #sidebar.collapsed{
-  width:280px;transform:translateX(-100%);pointer-events:none;
+
+/* Открытое состояние */
+body.is-mobile #sidebar.open{
+  left:0;
 }
-body.is-mobile #sidebar:not(.collapsed){
-  transform:translateX(0);pointer-events:all;
-  /* subtle shadow without blur keyword */
-  box-shadow:4px 0 20px rgba(0,0,0,.5);
-}
+
 
 .sb-head{padding:14px 12px 10px;display:flex;align-items:center;justify-content:space-between}
 .sb-title{font-family:'Syne',sans-serif;font-size:.7rem;font-weight:700;
