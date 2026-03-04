@@ -826,7 +826,9 @@ async function loadChatsCloud() {
   if (error || !data || !data.length) return null;
   return data.map(r => ({ id: r.chat_id, title: r.title, messages: r.messages }));
 }
-// Загрузить base64-картинку в Supabase Storage, вернуть публичный URL
+
+// ── FIX 1: Загрузить base64 в Storage, вернуть публичный URL
+//    Если загрузка упала — возвращаем null (не портим исходный part)
 async function uploadImageToStorage(base64, mime) {
   if (!currentUser) return null;
   try {
@@ -840,7 +842,7 @@ async function uploadImageToStorage(base64, mime) {
   } catch(e) { console.error('uploadImageToStorage:', e); return null; }
 }
 
-// Заменить base64 image_url на Storage URL во всех сообщениях чата
+// ── FIX 2: resolveImagesForCloud — НЕ затираем base64 если Storage упал
 async function resolveImagesForCloud(messages) {
   const result = [];
   for (const m of messages) {
@@ -848,17 +850,22 @@ async function resolveImagesForCloud(messages) {
     const newContent = [];
     for (const part of m.content) {
       if (part.type === 'image_url' && part.image_url?.url?.startsWith('data:')) {
-        // Ещё не загружено — загружаем
         const dataUrl = part.image_url.url;
         const mime    = dataUrl.split(';')[0].split(':')[1];
         const base64  = dataUrl.split(',')[1];
         const url     = await uploadImageToStorage(base64, mime);
-        if (url) newContent.push({ type: 'image_url', image_url: { url } });
-        else     newContent.push({ type: 'text', text: '[📷 Не удалось загрузить изображение]' });
+        if (url) {
+          // Успешно загружено в Storage — используем публичный URL
+          newContent.push({ type: 'image_url', image_url: { url } });
+        } else {
+          // Загрузка упала — оставляем исходный base64, не портим чат
+          newContent.push(part);
+        }
       } else {
         newContent.push(part);
       }
     }
+    // Если контент стал единственным текстом — упрощаем до строки
     if (newContent.length === 1 && newContent[0].type === 'text') {
       result.push({ ...m, content: newContent[0].text });
     } else {
@@ -868,18 +875,33 @@ async function resolveImagesForCloud(messages) {
   return result;
 }
 
+// ── FIX 3: upsertChatCloud — обновляем локальные messages после замены base64→URL
+//    чтобы после перезагрузки страницы картинки не пропадали
 async function upsertChatCloud(chat) {
   if (!currentUser) return;
   setSyncing(true);
-  const cloudMessages = await resolveImagesForCloud(chat.messages);
-  // Обновляем локальные сообщения тоже (base64 → Storage URL)
-  chat.messages = cloudMessages;
-  await sb.from('chats').upsert(
-    { user_id: currentUser.id, chat_id: chat.id, title: chat.title, messages: cloudMessages, updated_at: new Date().toISOString() },
-    { onConflict: 'user_id,chat_id' }
-  );
-  setSyncing(false);
+  try {
+    const cloudMessages = await resolveImagesForCloud(chat.messages);
+    // Обновляем messages в локальном объекте (base64 → Storage URL)
+    // чтобы и локально всё рендерилось нормально
+    chat.messages = cloudMessages;
+    await sb.from('chats').upsert(
+      {
+        user_id:    currentUser.id,
+        chat_id:    chat.id,
+        title:      chat.title,
+        messages:   cloudMessages,
+        updated_at: new Date().toISOString()
+      },
+      { onConflict: 'user_id,chat_id' }
+    );
+  } catch(e) {
+    console.error('upsertChatCloud error:', e);
+  } finally {
+    setSyncing(false);
+  }
 }
+
 async function deleteChatCloud(chatId) {
   if (!currentUser) return;
   await sb.from('chats').delete().eq('user_id', currentUser.id).eq('chat_id', chatId);
@@ -964,7 +986,6 @@ async function submitAuth() {
       return;
     }
     if (authMode === 'register' && !result.data?.session) {
-      // Supabase не возвращает ошибку на дубль email — проверяем identities
       const identities = result.data?.user?.identities;
       if (identities && identities.length === 0) {
         showAuthErr('Этот email уже зарегистрирован. Попробуйте войти.');
@@ -1043,14 +1064,11 @@ async function onLogin() {
   const email  = currentUser.email || '';
   const letter = email[0]?.toUpperCase() || '?';
   const handle = email.split('@')[0];
-  // Update header button
   const btn = document.getElementById('authBtn');
   btn.classList.add('logged-in');
   btn.innerHTML = `<div class="auth-avatar">${letter}</div><span id="authBtnLabel">${handle}</span>`;
-  // Update account menu
   document.getElementById('acctName').textContent  = handle;
   document.getElementById('acctEmail').textContent = email;
-  // Load cloud settings
   const cs = await loadSettingsCloud();
   if (cs) {
     localStorage.setItem('omni_sys',   cs.sys_prompt     || DEFAULT_SYS);
@@ -1058,7 +1076,6 @@ async function onLogin() {
     localStorage.setItem('omni_theme', cs.theme          || 'dark');
     applyTheme(cs.theme || 'dark');
   }
-  // Load cloud chats
   const cc = await loadChatsCloud();
   if (cc && cc.length) { chats = cc; activeChatId = chats[0].id; rebuildChatBox(); renderTabs(); }
   updateSyncUI();
@@ -1242,24 +1259,34 @@ async function deleteChat(id, e) {
   renderTabs(); rebuildChatBox();
   toast('Чат удалён','info');
 }
+
+// ── FIX 4: rebuildChatBox — рендерит картинки по ЛЮБОМУ URL (base64 или Storage)
 function rebuildChatBox() {
   const box = document.getElementById('chatBox'), msgs = getActive().messages;
   if (!msgs.length) { box.innerHTML = welcomeHTML(); return; }
   box.innerHTML = '';
   msgs.forEach(m => {
     if (m.role === 'user') {
-      if (typeof m.content === 'string') addMsg('user', esc(m.content), false);
-      else if (Array.isArray(m.content)) {
+      if (typeof m.content === 'string') {
+        addMsg('user', esc(m.content), false);
+      } else if (Array.isArray(m.content)) {
         let html = '';
         m.content.forEach(p => {
-          if (p.type==='text'&&p.text) html += '<p>'+esc(p.text)+'</p>';
-          else if (p.type==='image_url'&&p.image_url) html += `<img src="${p.image_url.url}" style="max-width:200px;max-height:160px;border-radius:8px;margin-top:6px;display:block"/>`;
+          if (p.type === 'text' && p.text) {
+            html += '<p>' + esc(p.text) + '</p>';
+          } else if (p.type === 'image_url' && p.image_url?.url) {
+            // Работает и с base64 data: URL, и с публичными https:// Storage URL
+            html += `<img src="${p.image_url.url}" style="max-width:200px;max-height:160px;border-radius:8px;margin-top:6px;display:block" onerror="this.style.display='none'"/>`;
+          }
         });
         addMsg('user', html, false);
       }
-    } else if (m.role === 'assistant') addMsg('bot', md(m.content), false);
+    } else if (m.role === 'assistant') {
+      addMsg('bot', md(m.content), false);
+    }
   });
 }
+
 function welcomeHTML() {
   return '<div class="welcome" id="ws"><div class="w-logo"><svg viewBox="0 0 72 72" fill="none"><defs><linearGradient id="wg2" x1="0" y1="0" x2="72" y2="72" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#a78bfa"/></linearGradient></defs><polygon points="36,4 68,20 68,52 36,68 4,52 4,20" fill="rgba(56,189,248,.06)" stroke="url(#wg2)" stroke-width="1.3"/><circle cx="36" cy="36" r="9" fill="url(#wg2)" opacity=".85"/><circle cx="36" cy="36" r="5" fill="rgba(255,255,255,.18)"/></svg></div><h2>OmniumAI</h2><p>Начните диалог или выберите другой чат.</p><div class="chips"><div class="chip" onclick="chip(this)">✦ Квантовые вычисления</div><div class="chip" onclick="chip(this)">✦ Стихотворение про космос</div><div class="chip" onclick="chip(this)">✦ Помоги с кодом Python</div><div class="chip" onclick="chip(this)">✦ Философия сознания</div></div></div>';
 }
