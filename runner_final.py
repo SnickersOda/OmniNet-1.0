@@ -578,14 +578,19 @@ def run_bot_in_thread():
 # MAIN
 # ============================================================================
 
-if __name__ == "__main__":
+def main():
     logger.info("=" * 60)
     logger.info("🚀 OmniumAI - Flask + Telegram Bot")
     logger.info("=" * 60)
-    
+
     bot_thread = threading.Thread(target=run_bot_in_thread, daemon=True)
     bot_thread.start()
+
     logger.info("✓ Telegram бот запущен в отдельном потоке")
-    
+
     logger.info(f"✓ Flask запущен на порту {PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
+
+
+if __name__ == "__main__":
+    main()
