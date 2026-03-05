@@ -1,66 +1,49 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-OmniumAI - Runner для Flask + Telegram Bot
-Запускает оба одновременно в одном процессе
+OmniumAI - Flask + Telegram Bot с модальным окном планов
 """
 
 import os
-import sys
 import threading
 import logging
 from datetime import datetime, timedelta
 import json
+import asyncio
 
-# Flask
 from flask import Flask, request, jsonify, Response, stream_with_context
 from groq import Groq
 
-# Telegram
-import asyncio
 from telegram import Update, LabeledPrice
 from telegram.ext import Application, CommandHandler, MessageHandler, PreCheckoutQueryHandler, SuccessfulPaymentHandler, filters, ContextTypes
 
-# Firebase
 import firebase_admin
 from firebase_admin import firestore, auth as fb_auth
-
-# ============================================================================
-# ЛОГИРОВАНИЕ
-# ============================================================================
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 # ============================================================================
 # CONFIG
 # ============================================================================
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 PORT = int(os.environ.get("PORT", 10000))
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "YOUR_BOT_NAME")
 
-# Firebase
 try:
     firebase_admin.initialize_app()
 except ValueError:
     pass
 
 db = firestore.client()
-
-# ============================================================================
-# FLASK APP
-# ============================================================================
-
 app = Flask(__name__)
 app.json.ensure_ascii = False
 
 # ============================================================================
-# FIRESTORE ФУНКЦИИ (используются обеими частями)
+# FIRESTORE
 # ============================================================================
 
 def get_user_plan(user_id: str) -> str:
@@ -72,7 +55,7 @@ def get_user_plan(user_id: str) -> str:
             if sub.get("status") == "active":
                 return sub.get("plan", "free")
     except Exception as e:
-        logger.error(f"Error getting plan: {e}")
+        logger.error(f"Error: {e}")
     return "free"
 
 def get_user_usage(user_id: str) -> dict:
@@ -97,8 +80,8 @@ def get_user_usage(user_id: str) -> dict:
         
         return usage
     except Exception as e:
-        logger.error(f"Error getting usage: {e}")
-        return {"messages_today": 0, "messages_this_month": 0}
+        logger.error(f"Error: {e}")
+        return {"messages_today": 0}
 
 def increment_usage(user_id: str):
     try:
@@ -108,7 +91,7 @@ def increment_usage(user_id: str):
         usage["messages_this_month"] = usage.get("messages_this_month", 0) + 1
         db.collection("users").document(uid).collection("billing").document("usage").set(usage, merge=True)
     except Exception as e:
-        logger.error(f"Error incrementing usage: {e}")
+        logger.error(f"Error: {e}")
 
 def activate_pro(user_id: str):
     try:
@@ -124,16 +107,16 @@ def activate_pro(user_id: str):
             "created_at": now.timestamp(),
             "updated_at": now.timestamp(),
         })
-        logger.info(f"✓ PRO activated for {user_id}")
+        logger.info(f"✓ PRO: {user_id}")
     except Exception as e:
-        logger.error(f"Error activating PRO: {e}")
+        logger.error(f"Error: {e}")
 
 def check_rate_limit(user_id: str, plan: str) -> tuple:
     usage = get_user_usage(user_id)
     
     if plan == "free":
         if usage.get("messages_today", 0) >= 50:
-            return False, "❌ Дневной лимит (50/день). /upgrade на PRO!"
+            return False, "❌ Дневной лимит (50/день)"
     
     return True, "OK"
 
@@ -143,47 +126,262 @@ def check_rate_limit(user_id: str, plan: str) -> tuple:
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "bot": "running"}), 200
+    return jsonify({"status": "ok"}), 200
 
 @app.route("/", methods=["GET"])
 def index():
-    return """
-    <html>
-    <head><title>OmniumAI</title></head>
-    <body style="background:#04050d;color:#e2e8f8;font-family:sans-serif;padding:40px;text-align:center">
-    <h1>🚀 OmniumAI</h1>
-    <p>Бот запущен!</p>
-    <p>Откройте Telegram бота: @YOUR_BOT_NAME</p>
-    <p>/start - начало</p>
-    <p>/upgrade - купить PRO (199 ⭐)</p>
-    </body>
-    </html>
-    """, 200, {"Content-Type": "text/html; charset=utf-8"}
+    html = r"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>OmniumAI</title>
+<style>
+:root{--bg:#04050d;--s1:#080b15;--s2:#0d1120;--accent:#38bdf8;--text:#e2e8f8;--muted:#4a5580;--border:rgba(255,255,255,.06);}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:sans-serif;overflow:hidden;}
+#app{height:100%;display:flex;flex-direction:column;}
+header{height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--border);}
+.logo{font-weight:bold;font-size:1.2rem;}
+.btn-pricing{padding:10px 20px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;font-weight:bold;}
+.btn-pricing:hover{background:rgba(56,189,248,.1);}
+#chatArea{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+#chatBox{flex:1;overflow-y:auto;padding:20px;}
+.welcome{text-align:center;padding:40px 20px;}
+.welcome h2{font-size:2rem;margin-bottom:20px;}
+.welcome p{color:var(--muted);margin-bottom:20px;}
+.msg-row{display:flex;gap:12px;margin:12px 0;}
+.msg-row.user{flex-direction:row-reverse;}
+.bubble{padding:12px 16px;border-radius:12px;background:rgba(13,17,32,.95);border:1px solid rgba(56,189,248,.1);word-wrap:break-word;white-space:pre-wrap;}
+.bubble.user{background:rgba(56,189,248,.1);}
+.input-area{padding:16px;border-top:1px solid var(--border);}
+.iw{display:flex;align-items:flex-end;gap:8px;background:rgba(13,17,32,.94);border:1px solid var(--border);border-radius:12px;padding:8px 12px;}
+#msgInput{flex:1;background:none;border:none;outline:none;color:var(--text);font-size:.9rem;resize:none;}
+.btn-send{width:38px;height:38px;border-radius:8px;border:none;cursor:pointer;background:linear-gradient(135deg,var(--accent),#818cf8);color:#000;font-weight:bold;}
+
+/* МОДАЛЬНОЕ ОКНО */
+#pricingModal{display:none;position:fixed;inset:0;z-index:700;background:rgba(4,5,13,.95);align-items:center;justify-content:center;padding:20px;overflow-y:auto;}
+#pricingModal.open{display:flex;}
+.modal-content{background:var(--s2);border:1px solid var(--border);border-radius:20px;padding:40px;max-width:900px;width:100%;}
+.modal-header{text-align:center;margin-bottom:40px;}
+.modal-header h2{font-size:2rem;margin-bottom:10px;}
+.modal-header p{color:var(--muted);font-size:1.1rem;}
+.pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:30px;margin-bottom:30px;}
+.plan-card{border:1px solid var(--border);border-radius:16px;padding:30px;background:var(--s1);transition:all .3s;}
+.plan-card:hover{border-color:var(--accent);}
+.plan-card.pro{border-color:var(--accent);background:rgba(56,189,248,.05);}
+.plan-badge{display:inline-block;background:var(--accent);color:#000;padding:6px 14px;border-radius:20px;font-size:.75rem;font-weight:bold;margin-bottom:12px;}
+.plan-name{font-size:1.4rem;font-weight:bold;margin-bottom:8px;}
+.plan-price{font-size:2.2rem;font-weight:bold;margin-bottom:4px;}
+.plan-price span{font-size:.75rem;color:var(--muted);}
+.plan-desc{color:var(--muted);font-size:.9rem;margin-bottom:20px;}
+.plan-features{list-style:none;margin-bottom:25px;}
+.plan-features li{padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:.9rem;}
+.plan-features li::before{content:'✓ ';color:var(--accent);font-weight:bold;margin-right:8px;}
+.plan-features li:last-child{border-bottom:none;}
+.plan-btn{width:100%;padding:14px;border-radius:12px;border:none;cursor:pointer;font-weight:bold;font-size:.95rem;transition:all .2s;}
+.plan-btn.free{background:rgba(255,255,255,.05);color:var(--text);border:1px solid var(--border);}
+.plan-btn.free:hover{background:rgba(255,255,255,.1);}
+.plan-btn.pro{background:var(--accent);color:#000;}
+.plan-btn.pro:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(56,189,248,.4);}
+
+.close-modal{position:absolute;top:20px;right:30px;background:none;border:none;color:var(--text);font-size:32px;cursor:pointer;width:40px;height:40px;display:flex;align-items:center;justify-content:center;}
+.close-modal:hover{color:var(--accent);}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo">🚀 OmniumAI</div>
+    <button class="btn-pricing" onclick="openPricing()">💳 Тарифы</button>
+  </header>
+
+  <div id="chatArea">
+    <div id="chatBox">
+      <div class="welcome">
+        <h2>✨ OmniumAI</h2>
+        <p>Разговаривайте с AI</p>
+      </div>
+    </div>
+
+    <div class="input-area">
+      <div class="iw">
+        <textarea id="msgInput" placeholder="Ваше сообщение..." rows="1"></textarea>
+        <button class="btn-send" onclick="sendMsg()">→</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛЬНОЕ ОКНО С ПЛАНАМИ -->
+<div id="pricingModal" onclick="closePricing(event)">
+  <button class="close-modal" onclick="closePricing()">✕</button>
+  
+  <div class="modal-content" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Выберите свой план</h2>
+      <p>Полный доступ к OmniumAI</p>
+    </div>
+
+    <div class="pricing-grid">
+      <!-- БЕСПЛАТНЫЙ ПЛАН -->
+      <div class="plan-card">
+        <div class="plan-name">Бесплатный</div>
+        <div class="plan-price">0 ₽<span>/месяц</span></div>
+        <div class="plan-desc">Для начинающих</div>
+        
+        <ul class="plan-features">
+          <li>50 сообщений в день</li>
+          <li>Только текст</li>
+          <li>Локальное хранилище</li>
+          <li>Базовые функции</li>
+        </ul>
+        
+        <button class="plan-btn free" onclick="closePricing()">Текущий план</button>
+      </div>
+
+      <!-- ПРОФЕССИОНАЛЬНЫЙ ПЛАН -->
+      <div class="plan-card pro">
+        <div class="plan-badge">РЕКОМЕНДУЕТСЯ ⭐</div>
+        <div class="plan-name">Профессиональный</div>
+        <div class="plan-price">199 ⭐<span>/месяц</span></div>
+        <div class="plan-desc">Полный доступ</div>
+        
+        <ul class="plan-features">
+          <li>500 сообщений в месяц</li>
+          <li>Анализ изображений (10 МБ)</li>
+          <li>Приоритетная очередь</li>
+          <li>Облачная синхронизация</li>
+          <li>Экспорт MD/PDF</li>
+          <li>Поддержка 24/7</li>
+        </ul>
+        
+        <button class="plan-btn pro" onclick="buyProPlan()">Купить PRO</button>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:30px;padding-top:20px;border-top:1px solid var(--border);font-size:.85rem;color:var(--muted);">
+      <p>💳 Платёж через Telegram Stars</p>
+      <p>🔒 Безопасно | 📱 Быстро | 🌍 Без документов</p>
+    </div>
+  </div>
+</div>
+
+<script>
+let busy = false;
+
+function openPricing() {
+  document.getElementById('pricingModal').classList.add('open');
+}
+
+function closePricing(e) {
+  if (!e || e.target.id === 'pricingModal') {
+    document.getElementById('pricingModal').classList.remove('open');
+  }
+}
+
+function buyProPlan() {
+  // Открыть бота и отправить /upgrade
+  const botUrl = 'https://t.me/BOT_USERNAME_REPLACE?start=upgrade';
+  window.open(botUrl, '_blank');
+  closePricing();
+}
+
+async function sendMsg() {
+  const inp = document.getElementById('msgInput');
+  const text = inp.value.trim();
+  if (!text || busy) return;
+  
+  busy = true;
+  inp.value = '';
+  
+  addMsg('user', text);
+  
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({messages: [{role: 'user', content: text}]})
+    });
+    
+    if (!res.ok) {
+      const d = await res.json();
+      addMsg('bot', '❌ ' + (d.error || 'Ошибка'));
+      return;
+    }
+    
+    const r = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '', el = null, full = '';
+    
+    while (true) {
+      const {done, value} = await r.read();
+      if (done) break;
+      buf += dec.decode(value, {stream: true});
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const d = line.slice(5).trim();
+        if (d === '[DONE]') break;
+        try {
+          const o = JSON.parse(d);
+          if (o.delta) {
+            full += o.delta;
+            if (!el) el = addMsg('bot', '');
+            el.textContent = full;
+          }
+        } catch (e) {}
+      }
+    }
+  } catch (err) {
+    addMsg('bot', '❌ Ошибка соединения');
+  } finally {
+    busy = false;
+  }
+}
+
+function addMsg(role, text) {
+  const box = document.getElementById('chatBox');
+  const w = box.querySelector('.welcome');
+  if (w && role === 'bot') w.remove();
+  
+  const row = document.createElement('div');
+  row.className = 'msg-row ' + role;
+  
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble ' + (role === 'user' ? 'user' : '');
+  bubble.textContent = text;
+  
+  row.appendChild(bubble);
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+  
+  return bubble;
+}
+
+document.getElementById('msgInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMsg();
+  }
+});
+</script>
+</body>
+</html>"""
+    
+    html = html.replace('BOT_USERNAME_REPLACE', BOT_USERNAME)
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 @app.route("/api/chat", methods=["POST"])
 def chat():
     try:
-        token = request.headers.get("Authorization", "").replace("Bearer ", "")
-        uid = None
-        
-        if token:
-            try:
-                decoded = fb_auth.verify_id_token(token)
-                uid = decoded["uid"]
-            except:
-                pass
-        
         data = request.get_json(force=True)
         messages = data.get("messages", [])
         
         if not messages:
             return jsonify({"error": "Нет сообщений"}), 400
-        
-        if uid:
-            plan = get_user_plan(uid)
-            allowed, msg = check_rate_limit(uid, plan)
-            if not allowed:
-                return jsonify({"error": msg}), 429
         
         system_msg = "Ты - помощник OmniumAI. Ответь кратко на русском."
         full_messages = [{"role": "system", "content": system_msg}] + messages
@@ -210,9 +408,6 @@ def chat():
                 yield "data: " + json.dumps({"error": str(e)[:300]}, ensure_ascii=False) + "\n\n"
                 yield "data: [DONE]\n\n"
         
-        if uid:
-            increment_usage(uid)
-        
         return Response(
             stream_with_context(generate()),
             mimetype="text/event-stream",
@@ -227,13 +422,20 @@ def chat():
 # ============================================================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args
+    
+    # Если пришло с параметром upgrade
+    if args and args[0] == 'upgrade':
+        await upgrade(update, context)
+        return
+    
     user_id = update.effective_user.id
     plan = get_user_plan(str(user_id))
     
     if plan == "pro":
-        msg = "👋 Привет! Вы на **PRO плане**!\n✓ 500 сообщений/месяц\n✓ Анализ изображений"
+        msg = "👋 Привет! Вы на **PRO плане**!\n\n✓ 500 сообщений/месяц\n✓ Анализ изображений\n\nПишите сообщения для ответов!"
     else:
-        msg = "👋 Привет! **БЕСПЛАТНЫЙ план** (50 сообщений/день)\n\n💳 /upgrade на PRO (199 ⭐)"
+        msg = "👋 Привет! Вы на **БЕСПЛАТНОМ плане** (50 сообщений/день)\n\n💳 Нажмите /upgrade для покупки PRO (199 ⭐)"
     
     await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -250,7 +452,7 @@ async def upgrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_invoice(
         chat_id=user_id,
         title="OmniumAI PRO",
-        description="500 сообщений/месяц + анализ изображений",
+        description="500 сообщений в месяц + анализ изображений + приоритет + облачная синхронизация",
         payload="omniumai_pro_monthly",
         currency="XTR",
         prices=prices,
@@ -258,8 +460,7 @@ async def upgrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = """
-🤖 OmniumAI Bot
+    msg = """🤖 OmniumAI Bot
 
 Команды:
 /start - Начало
@@ -267,7 +468,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /upgrade - Купить PRO (199 ⭐)
 /status - Статус подписки
 
-Просто пишите сообщения!
+Просто пишите сообщения для ответов от AI!
     """
     await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -277,9 +478,9 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     usage = get_user_usage(str(user_id))
     
     if plan == "pro":
-        msg = f"⭐ **PRO ПЛАН**\n📊 Сообщений: {usage.get('messages_today', 0)}/500"
+        msg = f"⭐ **PRO ПЛАН**\n\n📊 Сообщений: {usage.get('messages_today', 0)}/500\n✓ Анализ изображений включен\n✓ Приоритетная очередь активна"
     else:
-        msg = f"📊 **БЕСПЛАТНЫЙ ПЛАН**\n📊 Сообщений сегодня: {usage.get('messages_today', 0)}/50\n\n/upgrade на PRO"
+        msg = f"📊 **БЕСПЛАТНЫЙ ПЛАН**\n\nСообщений сегодня: {usage.get('messages_today', 0)}/50\n\n💳 /upgrade на PRO (199 ⭐)"
     
     await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -294,7 +495,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     allowed, msg = check_rate_limit(str(user_id), plan)
     
     if not allowed:
-        await update.message.reply_text(msg)
+        await update.message.reply_text(msg + "\n\n💳 /upgrade для покупки PRO")
         return
     
     await context.bot.send_chat_action(chat_id=user_id, action="typing")
@@ -329,23 +530,26 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     msg = """✅ **Спасибо за покупку!**
 
-🎉 PRO активирован на 30 дней!
+🎉 Ваша подписка PRO активирована на 30 дней!
 
-✓ 500 сообщений/месяц
-✓ Анализ изображений
+✓ 500 сообщений в месяц
+✓ Анализ изображений (10 МБ)
 ✓ Приоритетная очередь
+✓ Облачная синхронизация
+✓ Экспорт MD/PDF
 
-/status для проверки
+Теперь вы можете пользоваться всеми функциями!
+
+Команда /status для проверки.
     """
     await context.bot.send_message(chat_id=user_id, text=msg, parse_mode="Markdown")
     logger.info(f"✓ Payment: {user_id}")
 
 # ============================================================================
-# БОТ RUNNER
+# БОТ В ПОТОКЕ
 # ============================================================================
 
 async def run_bot():
-    """Запустить Telegram бота"""
     logger.info("🤖 Запуск Telegram бота...")
     
     telegram_app = Application.builder().token(BOT_TOKEN).build()
@@ -365,7 +569,6 @@ async def run_bot():
     await telegram_app.updater.start_polling()
 
 def run_bot_in_thread():
-    """Запустить бота в отдельном потоке"""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(run_bot())
@@ -376,14 +579,12 @@ def run_bot_in_thread():
 
 if __name__ == "__main__":
     logger.info("=" * 60)
-    logger.info("🚀 OmniumAI - Запуск Flask + Telegram Bot")
+    logger.info("🚀 OmniumAI - Flask + Telegram Bot")
     logger.info("=" * 60)
     
-    # Запустить бота в отдельном потоке
     bot_thread = threading.Thread(target=run_bot_in_thread, daemon=True)
     bot_thread.start()
     logger.info("✓ Telegram бот запущен в отдельном потоке")
     
-    # Запустить Flask
     logger.info(f"✓ Flask запущен на порту {PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
