@@ -34,10 +34,10 @@ GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 PORT = int(os.environ.get("PORT", 10000))
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "YOUR_BOT_NAME")
 
-try:
-    firebase_admin.initialize_app()
-except ValueError:
-    pass
+from firebase_admin import credentials
+
+cred = credentials.Certificate("firebase.json")
+firebase_admin.initialize_app(cred)
 
 db = firestore.client()
 app = Flask(__name__)
