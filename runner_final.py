@@ -15,7 +15,8 @@ from flask import Flask, request, jsonify, Response, stream_with_context
 from groq import Groq
 
 from telegram import Update, LabeledPrice
-from telegram.ext import Application, CommandHandler, MessageHandler, PreCheckoutQueryHandler, SuccessfulPaymentHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, PreCheckoutQueryHandler, filters, ContextTypes
+from telegram import SuccessfulPayment
 
 import firebase_admin
 from firebase_admin import firestore, auth as fb_auth
