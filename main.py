@@ -1038,3 +1038,8 @@ def clear():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
+import threading
+import runner_final
+
+threading.Thread(target=runner_final.main, daemon=True).start()
