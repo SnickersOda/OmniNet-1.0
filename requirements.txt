@@ -3,18 +3,3 @@ firebase-admin>=6.0.0
 groq>=0.4.0
 python-telegram-bot>=20.0
 gunicorn>=21.0.0
-```
-
-### 2. Добавить в репо файл:
-```
-runner.py    (только что создал)
-```
-
-### 3. На Render обновить start command:
-```
-python runner.py
-```
-
-Вместо старого:
-```
-gunicorn main:app --bind "0.0.0.0:${PORT:-10000}" --timeout 120 --workers 1
